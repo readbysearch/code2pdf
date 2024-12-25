@@ -1,78 +1,97 @@
 #!/usr/bin/env bash
 
-# Get the directory where the script is located
-BREW_PREFIX="$(brew --prefix)"
-INSTALL_DIR="$BREW_PREFIX/opt/code2pdf"
-SCRIPTS_DIR="$INSTALL_DIR/scripts"
-CONFIG_DIR="$INSTALL_DIR/config"
+DEV_MODE=false
 
-## Use local development directory instead
-# INSTALL_DIR="/Users/[username]/git/code2pdf"
-# SCRIPTS_DIR="$INSTALL_DIR/scripts"
-# CONFIG_DIR="$INSTALL_DIR/config"
+# Get the directory where the script is located
+get_install_dir() {
+   if [ "$DEV_MODE" = true ]; then
+       INSTALL_DIR="/Users/<you>/git/code2pdf"
+   else
+       BREW_PREFIX="$(brew --prefix)"
+       INSTALL_DIR="$BREW_PREFIX/opt/code2pdf"
+   fi
+   SCRIPTS_DIR="$INSTALL_DIR/scripts"
+   CONFIG_DIR="$INSTALL_DIR/config"
+}
 
 # Help text
 show_help() {
-    echo "Usage: code2pdf [OPTIONS] <file or directory>"
-    echo ""
-    echo "Options:"
-    echo "  -s, --single FILE    Convert a single file to PDF"
-    echo "  -a, --all DIR        Convert all source files in directory"
-    echo "  -h, --help           Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  code2pdf -s myfile.py        # Convert single file"
-    echo "  code2pdf -a src/             # Convert all files in directory"
+   echo "Usage: code2pdf [OPTIONS] <file or directory>"
+   echo ""
+   echo "Options:"
+   echo "  -s, --single FILE    Convert a single file to PDF"
+   echo "  -a, --all DIR        Convert all source files in directory"
+   echo "  --dev                Use local development directory"
+   echo "  -h, --help           Show this help message"
+   echo ""
+   echo "Examples:"
+   echo "  code2pdf -s myfile.py        # Convert single file"
+   echo "  code2pdf -a src/             # Convert all files in directory"
+   echo "  code2pdf --dev -s myfile.py  # Use development directory"
 }
 
 # Check dependencies
 check_dependencies() {
-    local missing=()
-    for cmd in vim gs jq; do
-        if ! command -v $cmd &> /dev/null; then
-            missing+=($cmd)
-        fi
-    done
-    
-    if [ ${#missing[@]} -ne 0 ]; then
-        echo "Error: Missing required dependencies: ${missing[*]}"
-        echo "Please install them using: brew install ${missing[*]}"
-        exit 1
-    fi
+   local missing=()
+   for cmd in vim gs jq; do
+       if ! command -v $cmd &> /dev/null; then
+           missing+=($cmd)
+       fi
+   done
+   
+   if [ ${#missing[@]} -ne 0 ]; then
+       echo "Error: Missing required dependencies: ${missing[*]}"
+       echo "Please install them using: brew install ${missing[*]}"
+       exit 1
+   fi
 }
 
 # Main logic
 main() {
-    check_dependencies
+   # parse the args until found "dev", and then remove it from the argument list 
+   while [[ $# -gt 0 ]]; do
+       case "$1" in
+           --dev)
+               DEV_MODE=true
+               shift
+               ;;
+           *)
+               break
+               ;;
+       esac
+   done
 
-    case "$1" in
-        -s|--single)
-            shift
-            "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "$1" "$(pwd)"
-            ;;
-        -a|--all)
-            shift
-            DEFAULT_BLACKLIST='["node_modules", ".git", "dist", "out"]'
-            DEFAULT_BLACKLIST_PATTERN='env*'
-            DEFAULT_WHITELIST_EXTENSIONS='["rb", "sh", "md", "js", "py", "ts", "java", "cpp", "h", "c"]'
-            DEFAULT_WHITELIST_FILES='["README", "LICENSE", "Makefile", "launch.json"]'
-            DEFAULT_INCLUDE_NO_EXTENSION='true' 
-            
-            "$SCRIPTS_DIR/print_all.sh" "$1" "$CONFIG_DIR/vimrc" \
-                "$DEFAULT_BLACKLIST" \
-                "$DEFAULT_BLACKLIST_PATTERN" \
-                "$DEFAULT_WHITELIST_EXTENSIONS" \
-                "$DEFAULT_WHITELIST_FILES" \
-                "$DEFAULT_INCLUDE_NO_EXTENSION"
-            ;;
-        -h|--help)
-            show_help
-            ;;
-        *)
-            show_help
-            exit 1
-            ;;
-    esac
+   get_install_dir
+   check_dependencies
+   
+   case "$1" in
+       -s|--single)
+           shift
+           "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "$1" "$(pwd)"
+           ;;
+       -a|--all)
+           shift
+           DEFAULT_BLACKLIST='["node_modules", ".git", "dist", "out"]'
+           DEFAULT_BLACKLIST_PATTERN='env*'
+           DEFAULT_WHITELIST_EXTENSIONS='["rb", "sh", "md", "js", "py", "ts", "java", "cpp", "h", "c", "html"]'
+           DEFAULT_WHITELIST_FILES='["README", "LICENSE", "Makefile", "launch.json"]'
+           DEFAULT_INCLUDE_NO_EXTENSION='true' 
+           
+           "$SCRIPTS_DIR/print_all.sh" "$1" "$CONFIG_DIR/vimrc" \
+               "$DEFAULT_BLACKLIST" \
+               "$DEFAULT_BLACKLIST_PATTERN" \
+               "$DEFAULT_WHITELIST_EXTENSIONS" \
+               "$DEFAULT_WHITELIST_FILES" \
+               "$DEFAULT_INCLUDE_NO_EXTENSION"
+           ;;
+       -h|--help)
+           show_help
+           ;;
+       *)
+           show_help
+           exit 1
+           ;;
+   esac
 }
 
 main "$@"

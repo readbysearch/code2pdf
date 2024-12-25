@@ -2,7 +2,7 @@
 declare -a visited_dirs=() # to avoid symbolic link recursion
 
 # If no argument is provided, use current directory as default
-R# Convert ROOT_DIR to absolute path immediately when setting it
+# Convert ROOT_DIR to absolute path immediately when setting it
 ROOT_DIR=$(cd "${1:-.}" && pwd)
 
 # Get vimrc path
