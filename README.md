@@ -19,14 +19,36 @@ Convert source code files to PDF or combine them into a single text file, with t
 
 ## Installation
 
-### Via Homebrew (recommended for macOS users)
+### Quick Install Script (Linux - Recommended)
+
+Install both tools with a single command:
+
+```bash
+# Install for current user (no sudo required)
+curl -sSL https://raw.githubusercontent.com/waleking/code2pdf/main/install.sh | bash -s -- --user
+
+# Or install system-wide (requires sudo)
+curl -sSL https://raw.githubusercontent.com/waleking/code2pdf/main/install.sh | bash -s -- --system
+
+# Interactive installation (choose user/system during install)
+curl -sSL https://raw.githubusercontent.com/waleking/code2pdf/main/install.sh | bash
+```
+
+**Install Script Features:**
+- ✅ Automatic dependency checking
+- ✅ Cross-platform Linux support  
+- ✅ User or system-wide installation
+- ✅ Automatic PATH configuration
+- ✅ Works on Ubuntu, CentOS, Fedora, RHEL, etc.
+
+### Via Homebrew (macOS users)
 
 ```bash
 brew tap readbysearch/code2pdf
 brew install code2pdf
 ```
 
-### Manual Installation (if you are not using Homebrew)
+### Manual Installation
 
 #### Prerequisites
 
