@@ -5,10 +5,11 @@ TARGET_DIR="$1"
 OUTPUT_FILE="$2"
 IGNORE_TYPES="$3"
 IGNORE_FOLDERS="$4"
-INCLUDE_TYPES="$5"
-MAX_FILE_SIZE="$6"
-NO_TOC="$7"
-VERBOSE="$8"
+IGNORE_FILES="$5"
+INCLUDE_TYPES="$6"
+MAX_FILE_SIZE="$7"
+NO_TOC="$8"
+VERBOSE="$9"
 
 # Track visited directories to prevent symbolic link recursion
 declare -a visited_dirs=()
@@ -17,6 +18,9 @@ declare -a processed_files=()
 # Convert comma-separated lists to arrays
 IFS=',' read -ra IGNORE_TYPES_ARRAY <<< "$IGNORE_TYPES"
 IFS=',' read -ra IGNORE_FOLDERS_ARRAY <<< "$IGNORE_FOLDERS"
+if [ -n "$IGNORE_FILES" ]; then
+    IFS=',' read -ra IGNORE_FILES_ARRAY <<< "$IGNORE_FILES"
+fi
 if [ -n "$INCLUDE_TYPES" ]; then
     IFS=',' read -ra INCLUDE_TYPES_ARRAY <<< "$INCLUDE_TYPES"
 fi
@@ -106,6 +110,16 @@ should_process_file() {
     # If file has no extension, extension equals basename
     if [ "$basename" = "$extension" ]; then
         extension=""
+    fi
+    
+    # Check if file is in the ignore-files list
+    if [ -n "$IGNORE_FILES" ]; then
+        for ignore_file in "${IGNORE_FILES_ARRAY[@]}"; do
+            if [ "$basename" = "$ignore_file" ]; then
+                [ "$VERBOSE" = true ] && echo "Skipping $file (ignored file: $basename)" >&2
+                return 1
+            fi
+        done
     fi
     
     # Check file size

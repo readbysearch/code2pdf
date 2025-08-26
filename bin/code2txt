@@ -4,6 +4,7 @@
 OUTPUT_FILE="combined.txt"
 IGNORE_TYPES="bin,pdf,jpg,png,gif,zip,tar,gz,exe,dll,so,dylib,class,jar,war,ear,pyc,pyo,txt"
 IGNORE_FOLDERS="node_modules,.git,dist,out,build,__pycache__,.venv,venv,env,.env,vendor,target"
+IGNORE_FILES=""
 INCLUDE_TYPES=""
 MAX_FILE_SIZE="500K"
 NO_TOC=false
@@ -31,6 +32,7 @@ Options:
                          (default: bin,pdf,jpg,png,gif,zip,tar,gz,exe,dll,so,dylib,class,jar,war,ear,pyc,pyo,txt)
   --ignore-folders LIST  Comma-separated list of folders to skip
                          (default: node_modules,.git,dist,out,build,__pycache__,.venv,venv,env,.env,vendor,target)
+  --ignore-files LIST    Comma-separated list of specific files to ignore (e.g., package-lock.json,yarn.lock)
   --include-types LIST   Only include these file types (overrides ignore-types)
   --max-file-size SIZE   Skip files larger than this (e.g., 500K, 1M, 10M)
                          (default: 500K)
@@ -43,6 +45,7 @@ Examples:
   code2txt src/                      # Process src directory
   code2txt -o output.txt src/        # Custom output file
   code2txt --include-types js,ts     # Only include JavaScript and TypeScript files
+  code2txt --ignore-files package-lock.json,yarn.lock  # Ignore specific files
   code2txt --max-file-size 1M        # Skip files larger than 1MB
   code2txt --no-toc --verbose src/   # Verbose output without table of contents
 
@@ -62,6 +65,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --ignore-folders)
             IGNORE_FOLDERS="$2"
+            shift 2
+            ;;
+        --ignore-files)
+            IGNORE_FILES="$2"
             shift 2
             ;;
         --include-types)
@@ -121,6 +128,9 @@ if [ "$VERBOSE" = true ]; then
     echo "  Output file: $OUTPUT_FILE"
     echo "  Ignore types: $IGNORE_TYPES"
     echo "  Ignore folders: $IGNORE_FOLDERS"
+    if [ -n "$IGNORE_FILES" ]; then
+        echo "  Ignore files: $IGNORE_FILES"
+    fi
     if [ -n "$INCLUDE_TYPES" ]; then
         echo "  Include types: $INCLUDE_TYPES"
     fi
@@ -135,6 +145,7 @@ fi
     "$OUTPUT_FILE" \
     "$IGNORE_TYPES" \
     "$IGNORE_FOLDERS" \
+    "$IGNORE_FILES" \
     "$INCLUDE_TYPES" \
     "$MAX_FILE_SIZE" \
     "$NO_TOC" \
