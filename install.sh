@@ -122,8 +122,9 @@ check_dependencies() {
         missing_deps+=("curl or wget")
     fi
     
-    if ! command_exists "unzip"; then
-        missing_deps+=("unzip")
+    # Check for extraction tools (unzip or tar)
+    if ! command_exists "unzip" && ! command_exists "tar"; then
+        missing_deps+=("unzip or tar")
     fi
     
     # Check code2pdf dependencies (optional)
@@ -143,9 +144,9 @@ check_dependencies() {
     if [[ ${#missing_deps[@]} -ne 0 ]]; then
         print_error "Missing required dependencies: ${missing_deps[*]}"
         print_info "Please install them first:"
-        echo "  Ubuntu/Debian: sudo apt update && sudo apt install curl unzip"
-        echo "  CentOS/RHEL:   sudo yum install curl unzip"
-        echo "  Fedora:        sudo dnf install curl unzip"
+        echo "  Ubuntu/Debian: sudo apt update && sudo apt install curl unzip (or tar is fine too)"
+        echo "  CentOS/RHEL:   sudo yum install curl unzip (or tar is fine too)"
+        echo "  Fedora:        sudo dnf install curl unzip (or tar is fine too)"
         exit 1
     fi
     
@@ -237,20 +238,39 @@ install_tools() {
         exit 1
     fi
     
-    # Download the repository as ZIP
+    # Download the repository (try tar.gz first, then zip)
     print_info "Downloading from GitHub..."
     cd "$TEMP_DIR"
     
-    if command_exists "curl"; then
-        curl -L "https://github.com/$GITHUB_REPO/archive/main.zip" -o code2pdf.zip
+    # Try tar.gz first (works without unzip)
+    if command_exists "tar"; then
+        print_info "Using tar.gz archive..."
+        if command_exists "curl"; then
+            curl -L "https://github.com/$GITHUB_REPO/archive/main.tar.gz" -o code2pdf.tar.gz
+        else
+            wget "https://github.com/$GITHUB_REPO/archive/main.tar.gz" -O code2pdf.tar.gz
+        fi
+        
+        # Extract with tar
+        print_info "Extracting files with tar..."
+        tar -xzf code2pdf.tar.gz
+        cd "code2pdf-main"
+    elif command_exists "unzip"; then
+        print_info "Using zip archive..."
+        if command_exists "curl"; then
+            curl -L "https://github.com/$GITHUB_REPO/archive/main.zip" -o code2pdf.zip
+        else
+            wget "https://github.com/$GITHUB_REPO/archive/main.zip" -O code2pdf.zip
+        fi
+        
+        # Extract with unzip
+        print_info "Extracting files with unzip..."
+        unzip -q code2pdf.zip
+        cd "code2pdf-main"
     else
-        wget "https://github.com/$GITHUB_REPO/archive/main.zip" -O code2pdf.zip
+        print_error "Neither tar nor unzip is available for extraction"
+        exit 1
     fi
-    
-    # Extract files
-    print_info "Extracting files..."
-    unzip -q code2pdf.zip
-    cd "code2pdf-main"
     
     # Install binary files
     print_info "Installing tools..."
