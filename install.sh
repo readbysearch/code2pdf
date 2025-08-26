@@ -292,9 +292,9 @@ install_tools() {
         sudo cp -r scripts config "$scripts_install_dir/"
         sudo chmod +x "$scripts_install_dir"/scripts/*.sh
         
-        # Update the main scripts to use the correct scripts directory
-        sudo sed -i "s|^SCRIPTS_DIR=.*|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2pdf"
-        sudo sed -i "s|^CONFIG_DIR=.*|CONFIG_DIR=\"$scripts_install_dir/config\"|g" "$INSTALL_DIR/code2pdf"
+        # Update code2pdf to use correct paths (disable brew, set direct paths)
+        sudo sed -i "s|BREW_PREFIX=\"\$(brew --prefix)\"|# BREW_PREFIX=\"\$(brew --prefix)\" # Disabled for Linux install|g" "$INSTALL_DIR/code2pdf"
+        sudo sed -i "s|INSTALL_DIR=\"\$BREW_PREFIX/opt/code2pdf\"|INSTALL_DIR=\"$scripts_install_dir\"|g" "$INSTALL_DIR/code2pdf"
         
         # Update code2txt to use the correct scripts directory  
         sudo sed -i "s|SCRIPTS_DIR=\"\$INSTALL_DIR/scripts\"|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2txt"
@@ -304,9 +304,9 @@ install_tools() {
         cp -r scripts config "$scripts_install_dir/"
         chmod +x "$scripts_install_dir"/scripts/*.sh
         
-        # Update the main scripts to use the correct scripts directory
-        sed -i "s|^SCRIPTS_DIR=.*|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2pdf"
-        sed -i "s|^CONFIG_DIR=.*|CONFIG_DIR=\"$scripts_install_dir/config\"|g" "$INSTALL_DIR/code2pdf"
+        # Update code2pdf to use correct paths (disable brew, set direct paths)
+        sed -i "s|BREW_PREFIX=\"\$(brew --prefix)\"|# BREW_PREFIX=\"\$(brew --prefix)\" # Disabled for Linux install|g" "$INSTALL_DIR/code2pdf"
+        sed -i "s|INSTALL_DIR=\"\$BREW_PREFIX/opt/code2pdf\"|INSTALL_DIR=\"$scripts_install_dir\"|g" "$INSTALL_DIR/code2pdf"
         
         # Update code2txt to use the correct scripts directory
         sed -i "s|SCRIPTS_DIR=\"\$INSTALL_DIR/scripts\"|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2txt"
