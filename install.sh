@@ -293,7 +293,11 @@ install_tools() {
         sudo chmod +x "$scripts_install_dir"/scripts/*.sh
         
         # Update the main scripts to use the correct scripts directory
-        sudo sed -i "s|INSTALL_DIR=\".*\"|INSTALL_DIR=\"$scripts_install_dir\"|g" "$INSTALL_DIR/code2pdf"
+        sudo sed -i "s|^SCRIPTS_DIR=.*|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2pdf"
+        sudo sed -i "s|^CONFIG_DIR=.*|CONFIG_DIR=\"$scripts_install_dir/config\"|g" "$INSTALL_DIR/code2pdf"
+        
+        # Update code2txt to use the correct scripts directory  
+        sudo sed -i "s|SCRIPTS_DIR=\"\$INSTALL_DIR/scripts\"|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2txt"
     else
         scripts_install_dir="$HOME/.local/share/code2pdf"
         mkdir -p "$scripts_install_dir"
@@ -301,7 +305,11 @@ install_tools() {
         chmod +x "$scripts_install_dir"/scripts/*.sh
         
         # Update the main scripts to use the correct scripts directory
-        sed -i "s|INSTALL_DIR=\".*\"|INSTALL_DIR=\"$scripts_install_dir\"|g" "$INSTALL_DIR/code2pdf"
+        sed -i "s|^SCRIPTS_DIR=.*|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2pdf"
+        sed -i "s|^CONFIG_DIR=.*|CONFIG_DIR=\"$scripts_install_dir/config\"|g" "$INSTALL_DIR/code2pdf"
+        
+        # Update code2txt to use the correct scripts directory
+        sed -i "s|SCRIPTS_DIR=\"\$INSTALL_DIR/scripts\"|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2txt"
     fi
     
     print_success "Tools installed successfully!"
