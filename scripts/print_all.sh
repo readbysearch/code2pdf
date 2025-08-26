@@ -47,7 +47,7 @@ print_to_pdf () {
         exit 1
     fi
     echo "DEBUG: generated pdf_name in /tmp folder: $pdf_name" >&2
-    vim -u "$VIMRC_PATH" -c "syntax on" "+set stl+=%{expand('%:~:.')}" "+hardcopy > /tmp/$pdf_name.ps" "+wq" "$file_name"
+    vim -u "$VIMRC_PATH" -n -c "set noswapfile" -c "set nobackup" -c "set nowritebackup" -c "syntax on" "+set stl+=%{expand('%:~:.')}" "+hardcopy > /tmp/$pdf_name.ps" "+wq" "$file_name"
     echo "DEBUG: Vim conversion complete" >&2
     echo "DEBUG: Converting PS to PDF..." >&2
     ps2pdf "/tmp/$pdf_name.ps" "/tmp/$pdf_name.pdf"

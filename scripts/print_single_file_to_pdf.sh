@@ -35,7 +35,7 @@ pdf_name=$(generate_pdf_file_name "$file_name")
 echo "/tmp/$pdf_name.ps"
 
 # Convert the file to PDF using Vim
-vim "+set stl+=%{expand('%:~:.')}" "+hardcopy > /tmp/$pdf_name.ps" "+wq" "$file_name"
+vim -n -c "set noswapfile" -c "set nobackup" -c "set nowritebackup" "+set stl+=%{expand('%:~:.')}" "+hardcopy > /tmp/$pdf_name.ps" "+wq" "$file_name"
 
 # Convert the PostScript file to PDF
 ps2pdf "/tmp/$pdf_name.ps" "/tmp/$pdf_name.pdf"
