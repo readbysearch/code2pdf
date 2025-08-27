@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 DEV_MODE=false
+IGNORE_FILES=""
 
 # Get the directory where the script is located
 get_install_dir() {
@@ -19,15 +20,17 @@ show_help() {
    echo "Usage: code2pdf [OPTIONS] <file or directory>"
    echo ""
    echo "Options:"
-   echo "  -s, --single FILE    Convert a single file to PDF"
-   echo "  -a, --all DIR        Convert all source files in directory"
-   echo "  --dev                Use local development directory"
-   echo "  -h, --help           Show this help message"
+   echo "  -s, --single FILE         Convert a single file to PDF"
+   echo "  -a, --all DIR             Convert all source files in directory"
+   echo "  --ignore-files LIST       Comma-separated list of specific files to ignore"
+   echo "  --dev                     Use local development directory"
+   echo "  -h, --help                Show this help message"
    echo ""
    echo "Examples:"
-   echo "  code2pdf -s myfile.py        # Convert single file"
-   echo "  code2pdf -a src/             # Convert all files in directory"
-   echo "  code2pdf --dev -s myfile.py  # Use development directory"
+   echo "  code2pdf -s myfile.py                              # Convert single file"
+   echo "  code2pdf -a src/                                   # Convert all files in directory"
+   echo "  code2pdf -a --ignore-files package-lock.json,yarn.lock src/  # Ignore specific files"
+   echo "  code2pdf --dev -s myfile.py                        # Use development directory"
 }
 
 # Check dependencies
@@ -48,12 +51,16 @@ check_dependencies() {
 
 # Main logic
 main() {
-   # parse the args until found "dev", and then remove it from the argument list 
+   # parse the args until found "dev" or other options, and then remove them from the argument list 
    while [[ $# -gt 0 ]]; do
        case "$1" in
            --dev)
                DEV_MODE=true
                shift
+               ;;
+           --ignore-files)
+               IGNORE_FILES="$2"
+               shift 2
                ;;
            *)
                break
@@ -75,14 +82,22 @@ main() {
            DEFAULT_BLACKLIST_PATTERN='env*'
            DEFAULT_WHITELIST_EXTENSIONS='["rb", "sh", "md", "js", "py", "ts", "java", "cpp", "h", "c", "html"]'
            DEFAULT_WHITELIST_FILES='["README", "LICENSE", "Makefile", "launch.json"]'
-           DEFAULT_INCLUDE_NO_EXTENSION='true' 
+           DEFAULT_INCLUDE_NO_EXTENSION='true'
+           
+           # Convert comma-separated ignore-files to JSON array
+           if [ -n "$IGNORE_FILES" ]; then
+               BLACKLIST_FILES_JSON="[$(echo "$IGNORE_FILES" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"
+           else
+               BLACKLIST_FILES_JSON='[]'
+           fi
            
            "$SCRIPTS_DIR/print_all.sh" "$1" "$CONFIG_DIR/vimrc" \
                "$DEFAULT_BLACKLIST" \
                "$DEFAULT_BLACKLIST_PATTERN" \
                "$DEFAULT_WHITELIST_EXTENSIONS" \
                "$DEFAULT_WHITELIST_FILES" \
-               "$DEFAULT_INCLUDE_NO_EXTENSION"
+               "$DEFAULT_INCLUDE_NO_EXTENSION" \
+               "$BLACKLIST_FILES_JSON"
            ;;
        -h|--help)
            show_help

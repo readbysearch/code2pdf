@@ -8,12 +8,13 @@ ROOT_DIR=$(cd "${1:-.}" && pwd)
 # Get vimrc path
 VIMRC_PATH=$2
 
-# These are the arguments passed from TypeScript
+# These are the arguments passed from the main script
 BLACKLISTED_FOLDERS_JSON=$3
 BLACKLISTED_FOLDER_PATTERN=$4
 WHITELISTED_FILE_EXTENSIONS_JSON=$5
 WHITELISTED_FILE_NAMES_JSON=$6
 INCLUDE_NO_EXTENSION=${7:-true}  # default value "true" means processing the files without extension, such as Dockerfile, vimrc, LICENSE, and Makefile.
+BLACKLISTED_FILES_JSON=${8:-'[]'}  # JSON array of specific files to ignore
 
 vim --version >&2
 echo "DEBUG: Starting script execution..." >&2
@@ -62,6 +63,7 @@ print_files_in_a_folder() {
     blacklisted_folder_pattern="$BLACKLISTED_FOLDER_PATTERN"
     declare -a whitelisted_file_extensions=($(echo "$WHITELISTED_FILE_EXTENSIONS_JSON" | jq -r '.[]'))
     declare -a whitelisted_file_names=($(echo "$WHITELISTED_FILE_NAMES_JSON" | jq -r '.[]'))
+    declare -a blacklisted_file_names=($(echo "$BLACKLISTED_FILES_JSON" | jq -r '.[]'))
     include_no_extension="$INCLUDE_NO_EXTENSION"
 
     # Check if the folder's basename is in the blacklist array
@@ -97,6 +99,14 @@ print_files_in_a_folder() {
             echo "DEBUG: filename: $filename" >&2
             echo "DEBUG: extension: $extension" >&2
             echo "DEBUG: include_no_extension: $include_no_extension" >&2
+
+            # Check if file is in the blacklisted files
+            for blacklisted_file in "${blacklisted_file_names[@]}"; do
+                if [ "$base_name" = "$blacklisted_file" ]; then
+                    echo "DEBUG: Skipping blacklisted file: $base_name" >&2
+                    continue 2  # Skip to next file in outer loop
+                fi
+            done
 
             # Handle files without extension
             if [ "$filename" == "$extension" ] && [ "$include_no_extension" == "true" ]; then
