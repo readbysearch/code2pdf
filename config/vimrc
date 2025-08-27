@@ -1,5 +1,7 @@
 " Use a Printer-Friendly Color Scheme
-colorscheme zellner 
+" Options: default (high contrast), morning (good readability), 
+" shine (light background), peachpuff (soft colors)
+colorscheme morning 
 
 " tabs and spaces handling
 set expandtab
