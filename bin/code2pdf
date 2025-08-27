@@ -2,6 +2,9 @@
 
 DEV_MODE=false
 IGNORE_FILES=""
+IGNORE_TYPES=""
+IGNORE_FOLDERS=""
+INCLUDE_TYPES=""
 
 # Get the directory where the script is located
 get_install_dir() {
@@ -22,15 +25,21 @@ show_help() {
    echo "Options:"
    echo "  -s, --single FILE         Convert a single file to PDF"
    echo "  -a, --all DIR             Convert all source files in directory"
+   echo "  --ignore-types LIST       Comma-separated list of file extensions to ignore"
+   echo "  --ignore-folders LIST     Comma-separated list of folders to skip"
    echo "  --ignore-files LIST       Comma-separated list of specific files to ignore"
+   echo "  --include-types LIST      Only include these file types (overrides default whitelist)"
    echo "  --dev                     Use local development directory"
    echo "  -h, --help                Show this help message"
    echo ""
    echo "Examples:"
-   echo "  code2pdf -s myfile.py                              # Convert single file"
-   echo "  code2pdf -a src/                                   # Convert all files in directory"
-   echo "  code2pdf -a --ignore-files package-lock.json,yarn.lock src/  # Ignore specific files"
-   echo "  code2pdf --dev -s myfile.py                        # Use development directory"
+   echo "  code2pdf -s myfile.py                                        # Convert single file"
+   echo "  code2pdf -a src/                                             # Convert all files in directory"
+   echo "  code2pdf -a --ignore-files package-lock.json src/            # Ignore specific files"
+   echo "  code2pdf -a --ignore-types md,txt src/                       # Ignore file types"
+   echo "  code2pdf -a --include-types js,ts src/                       # Only include JS/TS files"
+   echo "  code2pdf -a --ignore-folders tests,docs src/                 # Skip folders"
+   echo "  code2pdf --dev -s myfile.py                                  # Use development directory"
 }
 
 # Check dependencies
@@ -62,6 +71,18 @@ main() {
                IGNORE_FILES="$2"
                shift 2
                ;;
+           --ignore-types)
+               IGNORE_TYPES="$2"
+               shift 2
+               ;;
+           --ignore-folders)
+               IGNORE_FOLDERS="$2"
+               shift 2
+               ;;
+           --include-types)
+               INCLUDE_TYPES="$2"
+               shift 2
+               ;;
            *)
                break
                ;;
@@ -84,11 +105,29 @@ main() {
            DEFAULT_WHITELIST_FILES='["README", "LICENSE", "Makefile", "launch.json"]'
            DEFAULT_INCLUDE_NO_EXTENSION='true'
            
-           # Convert comma-separated ignore-files to JSON array
+           # Convert comma-separated parameters to JSON arrays
            if [ -n "$IGNORE_FILES" ]; then
-               BLACKLIST_FILES_JSON="[$(echo "$IGNORE_FILES" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"
+               BLACKLIST_FILES_JSON="[$(echo "$IGNORE_FILES" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"]"
            else
                BLACKLIST_FILES_JSON='[]'
+           fi
+           
+           if [ -n "$IGNORE_TYPES" ]; then
+               BLACKLIST_TYPES_JSON="[$(echo "$IGNORE_TYPES" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"]"
+           else
+               BLACKLIST_TYPES_JSON='[]'
+           fi
+           
+           if [ -n "$IGNORE_FOLDERS" ]; then
+               ADDITIONAL_BLACKLIST_FOLDERS_JSON="[$(echo "$IGNORE_FOLDERS" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"]"
+           else
+               ADDITIONAL_BLACKLIST_FOLDERS_JSON='[]'
+           fi
+           
+           if [ -n "$INCLUDE_TYPES" ]; then
+               INCLUDE_TYPES_JSON="[$(echo "$INCLUDE_TYPES" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"]"
+           else
+               INCLUDE_TYPES_JSON='[]'
            fi
            
            "$SCRIPTS_DIR/print_all.sh" "$1" "$CONFIG_DIR/vimrc" \
@@ -97,7 +136,10 @@ main() {
                "$DEFAULT_WHITELIST_EXTENSIONS" \
                "$DEFAULT_WHITELIST_FILES" \
                "$DEFAULT_INCLUDE_NO_EXTENSION" \
-               "$BLACKLIST_FILES_JSON"
+               "$BLACKLIST_FILES_JSON" \
+               "$BLACKLIST_TYPES_JSON" \
+               "$ADDITIONAL_BLACKLIST_FOLDERS_JSON" \
+               "$INCLUDE_TYPES_JSON"
            ;;
        -h|--help)
            show_help

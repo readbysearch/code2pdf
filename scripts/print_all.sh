@@ -15,6 +15,9 @@ WHITELISTED_FILE_EXTENSIONS_JSON=$5
 WHITELISTED_FILE_NAMES_JSON=$6
 INCLUDE_NO_EXTENSION=${7:-true}  # default value "true" means processing the files without extension, such as Dockerfile, vimrc, LICENSE, and Makefile.
 BLACKLISTED_FILES_JSON=${8:-'[]'}  # JSON array of specific files to ignore
+BLACKLISTED_TYPES_JSON=${9:-'[]'}  # JSON array of file extensions to ignore
+ADDITIONAL_BLACKLIST_FOLDERS_JSON=${10:-'[]'}  # Additional folders to skip
+INCLUDE_TYPES_JSON=${11:-'[]'}  # If specified, only include these types
 
 vim --version >&2
 echo "DEBUG: Starting script execution..." >&2
@@ -64,6 +67,9 @@ print_files_in_a_folder() {
     declare -a whitelisted_file_extensions=($(echo "$WHITELISTED_FILE_EXTENSIONS_JSON" | jq -r '.[]'))
     declare -a whitelisted_file_names=($(echo "$WHITELISTED_FILE_NAMES_JSON" | jq -r '.[]'))
     declare -a blacklisted_file_names=($(echo "$BLACKLISTED_FILES_JSON" | jq -r '.[]'))
+    declare -a blacklisted_types=($(echo "$BLACKLISTED_TYPES_JSON" | jq -r '.[]'))
+    declare -a additional_blacklist_folders=($(echo "$ADDITIONAL_BLACKLIST_FOLDERS_JSON" | jq -r '.[]'))
+    declare -a include_types=($(echo "$INCLUDE_TYPES_JSON" | jq -r '.[]'))
     include_no_extension="$INCLUDE_NO_EXTENSION"
 
     # Check if the folder's basename is in the blacklist array
@@ -71,6 +77,14 @@ print_files_in_a_folder() {
     for blacklist in "${blacklisted_folders[@]}"; do
     if [[ "$folder_basename" == "$blacklist" ]]; then
         echo "DEBUG: Skipping blacklisted folder: $folder" >&2
+        return
+    fi
+    done
+    
+    # Check additional blacklisted folders
+    for blacklist in "${additional_blacklist_folders[@]}"; do
+    if [[ "$folder_basename" == "$blacklist" ]]; then
+        echo "DEBUG: Skipping additional blacklisted folder: $folder" >&2
         return
     fi
     done
@@ -107,19 +121,44 @@ print_files_in_a_folder() {
                     continue 2  # Skip to next file in outer loop
                 fi
             done
-
-            # Handle files without extension
-            if [ "$filename" == "$extension" ] && [ "$include_no_extension" == "true" ]; then
-                echo "DEBUG: Found file without extension, setting process_file=true" >&2
-                process_file=true
-            else
-                # Check if the extension is in the whitelist
-                for allowed_extension in "${whitelisted_file_extensions[@]}"; do
-                    if [ "$extension" == "$allowed_extension" ]; then
+            
+            # Check if extension is in the blacklisted types
+            for blacklisted_type in "${blacklisted_types[@]}"; do
+                if [ "$extension" = "$blacklisted_type" ]; then
+                    echo "DEBUG: Skipping blacklisted type: $extension" >&2
+                    continue 2  # Skip to next file in outer loop
+                fi
+            done
+            
+            # If include_types is specified, only process those types
+            if [ "${#include_types[@]}" -gt 0 ]; then
+                process_file=false
+                for include_type in "${include_types[@]}"; do
+                    if [ "$extension" = "$include_type" ]; then
+                        echo "DEBUG: Including specified type: $extension" >&2
                         process_file=true
                         break
                     fi
                 done
+                # If extension doesn't match include_types, skip this file
+                if [ "$process_file" = false ]; then
+                    continue
+                fi
+            else
+                # Normal processing: check against whitelist
+                # Handle files without extension
+                if [ "$filename" == "$extension" ] && [ "$include_no_extension" == "true" ]; then
+                    echo "DEBUG: Found file without extension, setting process_file=true" >&2
+                    process_file=true
+                else
+                    # Check if the extension is in the whitelist
+                    for allowed_extension in "${whitelisted_file_extensions[@]}"; do
+                        if [ "$extension" == "$allowed_extension" ]; then
+                            process_file=true
+                            break
+                        fi
+                    done
+                fi
             fi
 
             # Check if the whole filename is in the whitelist
