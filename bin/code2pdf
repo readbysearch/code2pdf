@@ -60,7 +60,10 @@ check_dependencies() {
 
 # Main logic
 main() {
-   # parse the args until found "dev" or other options, and then remove them from the argument list 
+   # Store all arguments in an array to process them properly
+   local args=()
+   
+   # First pass: extract options
    while [[ $# -gt 0 ]]; do
        case "$1" in
            --dev)
@@ -84,11 +87,16 @@ main() {
                shift 2
                ;;
            *)
-               break
+               # Store non-option arguments
+               args+=("$1")
+               shift
                ;;
        esac
    done
 
+   # Restore positional parameters from stored arguments
+   set -- "${args[@]}"
+   
    get_install_dir
    check_dependencies
    
