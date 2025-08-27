@@ -105,41 +105,17 @@ main() {
            DEFAULT_WHITELIST_FILES='["README", "LICENSE", "Makefile", "launch.json"]'
            DEFAULT_INCLUDE_NO_EXTENSION='true'
            
-           # Convert comma-separated parameters to JSON arrays
-           if [ -n "$IGNORE_FILES" ]; then
-               BLACKLIST_FILES_JSON="[$(echo "$IGNORE_FILES" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"]"
-           else
-               BLACKLIST_FILES_JSON='[]'
-           fi
-           
-           if [ -n "$IGNORE_TYPES" ]; then
-               BLACKLIST_TYPES_JSON="[$(echo "$IGNORE_TYPES" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"]"
-           else
-               BLACKLIST_TYPES_JSON='[]'
-           fi
-           
-           if [ -n "$IGNORE_FOLDERS" ]; then
-               ADDITIONAL_BLACKLIST_FOLDERS_JSON="[$(echo "$IGNORE_FOLDERS" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"]"
-           else
-               ADDITIONAL_BLACKLIST_FOLDERS_JSON='[]'
-           fi
-           
-           if [ -n "$INCLUDE_TYPES" ]; then
-               INCLUDE_TYPES_JSON="[$(echo "$INCLUDE_TYPES" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')"]"
-           else
-               INCLUDE_TYPES_JSON='[]'
-           fi
-           
+           # Pass comma-separated parameters directly (like code2txt does)
            "$SCRIPTS_DIR/print_all.sh" "$1" "$CONFIG_DIR/vimrc" \
                "$DEFAULT_BLACKLIST" \
                "$DEFAULT_BLACKLIST_PATTERN" \
                "$DEFAULT_WHITELIST_EXTENSIONS" \
                "$DEFAULT_WHITELIST_FILES" \
                "$DEFAULT_INCLUDE_NO_EXTENSION" \
-               "$BLACKLIST_FILES_JSON" \
-               "$BLACKLIST_TYPES_JSON" \
-               "$ADDITIONAL_BLACKLIST_FOLDERS_JSON" \
-               "$INCLUDE_TYPES_JSON"
+               "$IGNORE_FILES" \
+               "$IGNORE_TYPES" \
+               "$IGNORE_FOLDERS" \
+               "$INCLUDE_TYPES"
            ;;
        -h|--help)
            show_help
