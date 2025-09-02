@@ -1,7 +1,12 @@
+" Add custom config directory to runtime path
+" Get the directory of this vimrc file (which contains the colors subdirectory)
+let s:config_dir = fnamemodify(resolve(expand('<sfile>:p')), ':h')
+let &runtimepath = s:config_dir . ',' . &runtimepath
+
 " Use a Printer-Friendly Color Scheme
-" Options: default (high contrast), morning (good readability), 
-" shine (light background), peachpuff (soft colors)
-colorscheme morning 
+" print_bw: Black & white scheme using bold/italic for syntax highlighting
+" Perfect for monochrome printers, avoiding gray shades
+colorscheme print_bw 
 
 " tabs and spaces handling
 set expandtab
