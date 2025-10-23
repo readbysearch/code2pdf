@@ -8,17 +8,79 @@ ROOT_DIR=$(cd "${1:-.}" && pwd)
 # Get vimrc path
 VIMRC_PATH=$2
 
-# These are the arguments passed from TypeScript
+# These are the arguments passed from the main script
 BLACKLISTED_FOLDERS_JSON=$3
 BLACKLISTED_FOLDER_PATTERN=$4
 WHITELISTED_FILE_EXTENSIONS_JSON=$5
 WHITELISTED_FILE_NAMES_JSON=$6
 INCLUDE_NO_EXTENSION=${7:-true}  # default value "true" means processing the files without extension, such as Dockerfile, vimrc, LICENSE, and Makefile.
+IGNORE_FILES=${8:-''}  # Comma-separated list of specific files to ignore
+IGNORE_TYPES=${9:-''}  # Comma-separated list of file extensions to ignore
+IGNORE_FOLDERS=${10:-''}  # Additional folders to skip
+INCLUDE_TYPES=${11:-''}  # If specified, only include these types
 
 vim --version >&2
 echo "DEBUG: Starting script execution..." >&2
 echo "DEBUG: Working directory: $(pwd)" >&2
 echo "DEBUG: ROOT_DIR: $ROOT_DIR" >&2
+echo "DEBUG: IGNORE_TYPES: $IGNORE_TYPES" >&2
+echo "DEBUG: IGNORE_FILES: $IGNORE_FILES" >&2
+echo "DEBUG: IGNORE_FOLDERS: $IGNORE_FOLDERS" >&2
+echo "DEBUG: INCLUDE_TYPES: $INCLUDE_TYPES" >&2
+
+# Convert comma-separated lists to arrays (like code2txt does)
+IFS=',' read -ra IGNORE_TYPES_ARRAY <<< "$IGNORE_TYPES"
+IFS=',' read -ra IGNORE_FILES_ARRAY <<< "$IGNORE_FILES"
+IFS=',' read -ra IGNORE_FOLDERS_ARRAY <<< "$IGNORE_FOLDERS"
+IFS=',' read -ra INCLUDE_TYPES_ARRAY <<< "$INCLUDE_TYPES"
+
+# Function to check if file should be processed (based on code2txt logic)
+should_process_file() {
+    local file="$1"
+    local basename="$(basename "$file")"
+    local extension="${basename##*.}"
+    
+    # If file has no extension, extension equals basename
+    if [ "$basename" = "$extension" ]; then
+        extension=""
+    fi
+    
+    # Check if file is in the ignore-files list
+    if [ -n "$IGNORE_FILES" ]; then
+        for ignore_file in "${IGNORE_FILES_ARRAY[@]}"; do
+            if [ "$basename" = "$ignore_file" ]; then
+                echo "DEBUG: Skipping ignored file: $basename" >&2
+                return 1
+            fi
+        done
+    fi
+    
+    # If include-types is specified, only process those types
+    if [ -n "$INCLUDE_TYPES" ]; then
+        if [ -z "$extension" ]; then
+            # No extension - skip unless explicitly handling no-extension files
+            return 1
+        fi
+        for include_type in "${INCLUDE_TYPES_ARRAY[@]}"; do
+            if [ "$extension" = "$include_type" ]; then
+                return 0
+            fi
+        done
+        return 1
+    fi
+    
+    # Otherwise, check ignore-types
+    if [ -n "$extension" ]; then
+        for ignore_type in "${IGNORE_TYPES_ARRAY[@]}"; do
+            if [ "$extension" = "$ignore_type" ]; then
+                echo "DEBUG: Skipping ignored type: $extension" >&2
+                return 1
+            fi
+        done
+    fi
+    
+    return 0
+}
 
 # Count lines in all .ts files excluding those in node_modules and display file names
 # find "$ROOT_DIR" -name "node_modules" -prune -o -name "*$EXTENSION" -type f -print | xargs wc -l
@@ -67,7 +129,7 @@ print_files_in_a_folder() {
     # Quoted assignment, in case $1 has spaces
     folder="$1"
 
-    # Parse the JSON strings into bash arrays
+    # Parse the JSON strings into bash arrays for existing parameters
     declare -a blacklisted_folders=($(echo "$BLACKLISTED_FOLDERS_JSON" | jq -r '.[]'))
     blacklisted_folder_pattern="$BLACKLISTED_FOLDER_PATTERN"
     declare -a whitelisted_file_extensions=($(echo "$WHITELISTED_FILE_EXTENSIONS_JSON" | jq -r '.[]'))
@@ -79,6 +141,14 @@ print_files_in_a_folder() {
     for blacklist in "${blacklisted_folders[@]}"; do
     if [[ "$folder_basename" == "$blacklist" ]]; then
         echo "DEBUG: Skipping blacklisted folder: $folder" >&2
+        return
+    fi
+    done
+    
+    # Check additional blacklisted folders from ignore-folders parameter
+    for ignore_folder in "${IGNORE_FOLDERS_ARRAY[@]}"; do
+    if [[ "$folder_basename" == "$ignore_folder" ]]; then
+        echo "DEBUG: Skipping ignored folder: $folder" >&2
         return
     fi
     done
@@ -97,43 +167,52 @@ print_files_in_a_folder() {
         [ -e "$entry" ] || continue
 
         if [ -f "$entry" ]; then
-            # File handling
-            base_name=$(basename "$entry")
-            filename="${base_name%.*}"      # text before the last dot
-            extension="${base_name##*.}"    # text after the last dot
-            process_file=false
+            # First check using the new filtering logic
+            if should_process_file "$entry"; then
+                # Now check against the original whitelist logic
+                base_name=$(basename "$entry")
+                filename="${base_name%.*}"      # text before the last dot
+                extension="${base_name##*.}"    # text after the last dot
+                process_file=false
 
-            echo "DEBUG: Processing file: $entry" >&2
-            echo "DEBUG: filename: $filename" >&2
-            echo "DEBUG: extension: $extension" >&2
-            echo "DEBUG: include_no_extension: $include_no_extension" >&2
+                echo "DEBUG: Processing file: $entry" >&2
+                echo "DEBUG: filename: $filename" >&2
+                echo "DEBUG: extension: $extension" >&2
+                echo "DEBUG: include_no_extension: $include_no_extension" >&2
 
-            # Handle files without extension
-            if [ "$filename" == "$extension" ] && [ "$include_no_extension" == "true" ]; then
-                echo "DEBUG: Found file without extension, setting process_file=true" >&2
-                process_file=true
-            else
-                # Check if the extension is in the whitelist
-                for allowed_extension in "${whitelisted_file_extensions[@]}"; do
-                    if [ "$extension" == "$allowed_extension" ]; then
-                        process_file=true
-                        break
-                    fi
-                done
-            fi
-
-            # Check if the whole filename is in the whitelist
-            for allowed_name in "${whitelisted_file_names[@]}"; do
-                if [ "$base_name" == "$allowed_name" ]; then
+                # If include-types was specified and file passed should_process_file, process it
+                if [ -n "$INCLUDE_TYPES" ]; then
                     process_file=true
-                    break
-                fi
-            done
+                else
+                    # Check against original whitelist logic
+                    # Handle files without extension
+                    if [ "$filename" == "$extension" ] && [ "$include_no_extension" == "true" ]; then
+                        echo "DEBUG: Found file without extension, setting process_file=true" >&2
+                        process_file=true
+                    else
+                        # Check if the extension is in the whitelist
+                        for allowed_extension in "${whitelisted_file_extensions[@]}"; do
+                            if [ "$extension" == "$allowed_extension" ]; then
+                                process_file=true
+                                break
+                            fi
+                        done
+                    fi
 
-            # If flagged for processing, convert to PDF
-            if [ "$process_file" == "true" ]; then
-                print_to_pdf "$entry"
-                echo "PROGRESS: Processed $entry" >&2
+                    # Check if the whole filename is in the whitelist
+                    for allowed_name in "${whitelisted_file_names[@]}"; do
+                        if [ "$base_name" == "$allowed_name" ]; then
+                            process_file=true
+                            break
+                        fi
+                    done
+                fi
+
+                # If flagged for processing, convert to PDF
+                if [ "$process_file" == "true" ]; then
+                    print_to_pdf "$entry"
+                    echo "PROGRESS: Processed $entry" >&2
+                fi
             fi
 
         else

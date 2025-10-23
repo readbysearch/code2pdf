@@ -1,0 +1,15 @@
+{
+    "app_name": "Sample Project",
+    "version": "1.0.0",
+    "debug": true,
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "name": "sample_db"
+    },
+    "features": {
+        "logging": true,
+        "caching": false,
+        "api": true
+    }
+}

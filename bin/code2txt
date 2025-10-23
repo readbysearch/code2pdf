@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+
+# Default values
+OUTPUT_FILE="combined.txt"
+IGNORE_TYPES="bin,pdf,jpg,png,gif,zip,tar,gz,exe,dll,so,dylib,class,jar,war,ear,pyc,pyo,txt"
+IGNORE_FOLDERS="node_modules,.git,dist,out,build,__pycache__,.venv,venv,env,.env,vendor,target"
+IGNORE_FILES=""
+INCLUDE_TYPES=""
+MAX_FILE_SIZE="500K"
+NO_TOC=false
+VERBOSE=false
+TARGET_DIR=""
+
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
+SCRIPTS_DIR="$INSTALL_DIR/scripts"
+
+# Help text
+show_help() {
+    cat << EOF
+Usage: code2txt [OPTIONS] [DIRECTORY]
+
+Combine source code files into a single text file optimized for LLM context input.
+
+Arguments:
+  DIRECTORY              Target directory to process (default: current directory)
+
+Options:
+  -o, --output FILE      Output filename (default: combined.txt)
+  --ignore-types LIST    Comma-separated list of file extensions to ignore
+                         (default: bin,pdf,jpg,png,gif,zip,tar,gz,exe,dll,so,dylib,class,jar,war,ear,pyc,pyo,txt)
+  --ignore-folders LIST  Comma-separated list of folders to skip
+                         (default: node_modules,.git,dist,out,build,__pycache__,.venv,venv,env,.env,vendor,target)
+  --ignore-files LIST    Comma-separated list of specific files to ignore (e.g., package-lock.json,yarn.lock)
+  --include-types LIST   Only include these file types (overrides ignore-types)
+  --max-file-size SIZE   Skip files larger than this (e.g., 500K, 1M, 10M)
+                         (default: 500K)
+  --no-toc               Skip table of contents generation
+  --verbose              Show processing details
+  -h, --help             Show this help message
+
+Examples:
+  code2txt                           # Process current directory
+  code2txt src/                      # Process src directory
+  code2txt -o output.txt src/        # Custom output file
+  code2txt --include-types js,ts     # Only include JavaScript and TypeScript files
+  code2txt --ignore-files package-lock.json,yarn.lock  # Ignore specific files
+  code2txt --max-file-size 1M        # Skip files larger than 1MB
+  code2txt --no-toc --verbose src/   # Verbose output without table of contents
+
+EOF
+}
+
+# Parse command-line arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o|--output)
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
+        --ignore-types)
+            IGNORE_TYPES="$2"
+            shift 2
+            ;;
+        --ignore-folders)
+            IGNORE_FOLDERS="$2"
+            shift 2
+            ;;
+        --ignore-files)
+            IGNORE_FILES="$2"
+            shift 2
+            ;;
+        --include-types)
+            INCLUDE_TYPES="$2"
+            shift 2
+            ;;
+        --max-file-size)
+            MAX_FILE_SIZE="$2"
+            shift 2
+            ;;
+        --no-toc)
+            NO_TOC=true
+            shift
+            ;;
+        --verbose)
+            VERBOSE=true
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -*)
+            echo "Error: Unknown option $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+        *)
+            # Assume it's the target directory
+            TARGET_DIR="$1"
+            shift
+            ;;
+    esac
+done
+
+# Use current directory if no target directory specified
+if [ -z "$TARGET_DIR" ]; then
+    TARGET_DIR="."
+fi
+
+# Convert to absolute path
+TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd)" || {
+    echo "Error: Directory '$TARGET_DIR' does not exist or is not accessible"
+    exit 1
+}
+
+# Check if the processing script exists
+if [ ! -f "$SCRIPTS_DIR/combine_to_txt.sh" ]; then
+    echo "Error: Processing script not found at $SCRIPTS_DIR/combine_to_txt.sh"
+    exit 1
+fi
+
+# Show configuration if verbose
+if [ "$VERBOSE" = true ]; then
+    echo "Configuration:"
+    echo "  Target directory: $TARGET_DIR"
+    echo "  Output file: $OUTPUT_FILE"
+    echo "  Ignore types: $IGNORE_TYPES"
+    echo "  Ignore folders: $IGNORE_FOLDERS"
+    if [ -n "$IGNORE_FILES" ]; then
+        echo "  Ignore files: $IGNORE_FILES"
+    fi
+    if [ -n "$INCLUDE_TYPES" ]; then
+        echo "  Include types: $INCLUDE_TYPES"
+    fi
+    echo "  Max file size: $MAX_FILE_SIZE"
+    echo "  Generate TOC: $([ "$NO_TOC" = true ] && echo "no" || echo "yes")"
+    echo ""
+fi
+
+# Call the processing script
+"$SCRIPTS_DIR/combine_to_txt.sh" \
+    "$TARGET_DIR" \
+    "$OUTPUT_FILE" \
+    "$IGNORE_TYPES" \
+    "$IGNORE_FOLDERS" \
+    "$IGNORE_FILES" \
+    "$INCLUDE_TYPES" \
+    "$MAX_FILE_SIZE" \
+    "$NO_TOC" \
+    "$VERBOSE"
+
+exit_code=$?
+
+if [ $exit_code -eq 0 ]; then
+    echo "Successfully created $OUTPUT_FILE"
+else
+    echo "Error: Failed to create output file"
+    exit $exit_code
+fi

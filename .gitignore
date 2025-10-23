@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+*.egg-info/
+
+# Virtual environments
+test_venv/
+venv/
+.venv/
+env/
+.env/
+
+# Output files
+combined.txt
+*.pdf
+!tests/fixtures/**/*.pdf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+htmlcov/
+.tox/
+.hypothesis/
