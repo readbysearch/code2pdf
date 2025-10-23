@@ -10,6 +10,10 @@ set fileencoding=utf-8
 set printoptions=number:y
 set guifont=Noto\ Sans\ Simplified\ Chinese
 
+" Configure CJK (Chinese/Japanese/Korean) font for printing
+set printmbcharset=GB_2312-80
+set printmbfont=r:Noto\ Sans\ SC
+
 " Enable syntax highlighting
 syntax on
 

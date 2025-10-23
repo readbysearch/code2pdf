@@ -25,22 +25,22 @@ vs_project_folder_name="$2"
 generate_pdf_file_name() {
     # Extract the file name from the full path and remove the extension
     basename "$1" | rev | cut -d. -f2- | rev
-
 }
 
 echo "Converting to a PDF file for $file_name"
 
 pdf_name=$(generate_pdf_file_name "$file_name")
 
-echo "/tmp/$pdf_name.ps"
+# Get the directory where this script is located
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Convert the file to PDF using Vim
-vim "+set stl+=%{expand('%:~:.')}" "+hardcopy > /tmp/$pdf_name.ps" "+wq" "$file_name"
+# Convert the file to PDF using Python script with UTF-8 support
+python3 "$script_dir/code_to_pdf.py" "$file_name" "$vs_project_folder_name/$pdf_name.pdf" "$file_name"
 
-# Convert the PostScript file to PDF
-ps2pdf "/tmp/$pdf_name.ps" "/tmp/$pdf_name.pdf"
-
-# Move the PDF to the project folder
-mv "/tmp/$pdf_name.pdf" "$vs_project_folder_name/$pdf_name.pdf"
-
-echo "PDF created at $vs_project_folder_name/$pdf_name"
+# Check if PDF was created successfully
+if [ $? -eq 0 ]; then
+    echo "PDF created at $vs_project_folder_name/$pdf_name.pdf"
+else
+    echo "Error: Failed to create PDF"
+    exit 1
+fi

@@ -39,7 +39,6 @@ print_to_pdf () {
     file_name="$1"
     echo "DEBUG: ===================" >&2
     echo "DEBUG: Converting file: $file_name" >&2
-    echo "DEBUG: Starting vim conversion..." >&2
     pdf_name="$( generate_pdf_file_name "$file_name")"
     # Check if the input is empty or has unexpected characters
     if [[ -z $pdf_name ]]; then
@@ -47,10 +46,21 @@ print_to_pdf () {
         exit 1
     fi
     echo "DEBUG: generated pdf_name in /tmp folder: $pdf_name" >&2
-    vim -u "$VIMRC_PATH" -c "syntax on" "+set stl+=%{expand('%:~:.')}" "+hardcopy > /tmp/$pdf_name.ps" "+wq" "$file_name"
-    echo "DEBUG: Vim conversion complete" >&2
-    echo "DEBUG: Converting PS to PDF..." >&2
-    ps2pdf "/tmp/$pdf_name.ps" "/tmp/$pdf_name.pdf"
+
+    # Get the directory where this script is located
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    # Get relative path from ROOT_DIR for display in PDF header
+    relative_path=$(realpath --relative-to="$ROOT_DIR" "$file_name")
+
+    # Convert using Python script with UTF-8 support
+    python3 "$script_dir/code_to_pdf.py" "$file_name" "/tmp/$pdf_name.pdf" "$relative_path"
+
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to convert $file_name to PDF" >&2
+        exit 1
+    fi
+    echo "DEBUG: PDF conversion complete" >&2
 }
 
 print_files_in_a_folder() {
@@ -169,8 +179,11 @@ done
 echo "Info: Contents of table_of_contents:" >&2
 cat table_of_contents >&2
 
-vim -u "$VIMRC_PATH" "+hardcopy > 00_table_of_contents.ps" "+wq" table_of_contents
-ps2pdf 00_table_of_contents.ps 00_table_of_contents.pdf
+# Get the directory where this script is located
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Convert table of contents using Python script with UTF-8 support
+python3 "$script_dir/code_to_pdf.py" table_of_contents 00_table_of_contents.pdf "Table of Contents"
 
 ##########################################3
 # Step 3. Merge all /tmp/*.pdf into a single pdf

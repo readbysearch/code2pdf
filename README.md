@@ -7,7 +7,8 @@ Convert source code files to PDF with a table of contents, preserving code forma
 - Convert single source code files to PDF
 - Convert entire directories of code files to PDF with a table of contents
 - Preserve syntax highlighting and formatting
-- Support for multiple programming languages
+- Support for 500+ programming languages (via Pygments)
+- **Full UTF-8 and CJK support** (Chinese, Japanese, Korean)
 - Available as a command-line tool
 
 ## Installation
@@ -23,8 +24,8 @@ brew install code2pdf
 
 #### Prerequisites
 
-- Vim (for syntax highlighting)
-- Ghostscript (for PDF operations)
+- Python 3 (with pip)
+- Ghostscript (for PDF merging)
 - jq (for JSON processing)
 - Bash shell (Unix-like systems)
 
@@ -36,17 +37,30 @@ git clone https://github.com/readbysearch/code2pdf.git
 cd code2pdf
 ```
 
-2. Install dependencies (macOS example)
+2. Install dependencies
 ```bash
-brew install vim ghostscript jq
+# macOS example
+brew install python3 ghostscript jq
+
+# Install Python packages
+pip3 install --user pygments weasyprint
 ```
 
-3. Make the script executable
+3. **(Optional) Install CJK fonts for Chinese/Japanese/Korean support**
+```bash
+# For Simplified Chinese (most common)
+./scripts/setup_cjk_fonts.sh sc
+
+# For other languages: tc (Traditional Chinese), jp (Japanese), kr (Korean), all (all languages)
+# See docs/font_installation_guide.md for details
+```
+
+4. Make the script executable
 ```bash
 chmod +x bin/code2pdf
 ```
 
-4. Add to your PATH (optional)
+5. Add to your PATH (optional)
 ```bash
 ln -s "$(pwd)/bin/code2pdf" /usr/local/bin/code2pdf
 ```
@@ -69,6 +83,24 @@ Show help:
 ```bash
 code2pdf --help
 ```
+
+## CJK Font Support
+
+If your code contains Chinese, Japanese, or Korean characters, you need to install CJK fonts:
+
+```bash
+# Quick setup for Simplified Chinese
+./scripts/setup_cjk_fonts.sh sc
+```
+
+**Full documentation**: [docs/font_installation_guide.md](docs/font_installation_guide.md)
+
+**Supported languages**:
+- `sc` - Simplified Chinese (简体中文)
+- `tc` - Traditional Chinese (繁體中文)
+- `jp` - Japanese (日本語)
+- `kr` - Korean (한국어)
+- `all` - All CJK languages (~150 MB)
 
 ## License
 

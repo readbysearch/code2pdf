@@ -33,15 +33,34 @@ show_help() {
 # Check dependencies
 check_dependencies() {
    local missing=()
-   for cmd in vim gs jq; do
+
+   # Check for command-line tools
+   for cmd in python3 gs jq; do
        if ! command -v $cmd &> /dev/null; then
            missing+=($cmd)
        fi
    done
-   
+
+   # Check for Python packages
+   if command -v python3 &> /dev/null; then
+       if ! python3 -c "import pygments" 2> /dev/null; then
+           echo "Error: Python package 'pygments' is not installed"
+           echo "Please install it using: pip3 install --user pygments"
+           exit 1
+       fi
+       if ! python3 -c "import weasyprint" 2> /dev/null; then
+           echo "Error: Python package 'weasyprint' is not installed"
+           echo "Please install it using: pip3 install --user weasyprint"
+           exit 1
+       fi
+   fi
+
    if [ ${#missing[@]} -ne 0 ]; then
        echo "Error: Missing required dependencies: ${missing[*]}"
-       echo "Please install them using: brew install ${missing[*]}"
+       echo "Please install them:"
+       echo "  - python3: brew install python3"
+       echo "  - gs (ghostscript): see ps2pdf_installation_guide.md"
+       echo "  - jq: brew install jq"
        exit 1
    fi
 }
