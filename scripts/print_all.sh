@@ -1,6 +1,9 @@
 #!/bin/bash
 declare -a visited_dirs=() # to avoid symbolic link recursion
 
+# Get the directory where this script is located (before changing directories)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # If no argument is provided, use current directory as default
 # Convert ROOT_DIR to absolute path immediately when setting it
 ROOT_DIR=$(cd "${1:-.}" && pwd)
@@ -109,14 +112,11 @@ print_to_pdf () {
     fi
     echo "DEBUG: generated pdf_name in /tmp folder: $pdf_name" >&2
 
-    # Get the directory where this script is located
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
     # Get relative path from ROOT_DIR for display in PDF header
     relative_path=$(realpath --relative-to="$ROOT_DIR" "$file_name")
 
     # Convert using Python script with UTF-8 support
-    python3 "$script_dir/code_to_pdf.py" "$file_name" "/tmp/$pdf_name.pdf" "$relative_path"
+    python3 "$SCRIPT_DIR/code_to_pdf.py" "$file_name" "/tmp/$pdf_name.pdf" "$relative_path"
 
     if [ $? -ne 0 ]; then
         echo "Error: Failed to convert $file_name to PDF" >&2
@@ -258,11 +258,8 @@ done
 echo "Info: Contents of table_of_contents:" >&2
 cat table_of_contents >&2
 
-# Get the directory where this script is located
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # Convert table of contents using Python script with UTF-8 support
-python3 "$script_dir/code_to_pdf.py" table_of_contents 00_table_of_contents.pdf "Table of Contents"
+python3 "$SCRIPT_DIR/code_to_pdf.py" table_of_contents 00_table_of_contents.pdf "Table of Contents"
 
 ##########################################3
 # Step 3. Merge all /tmp/*.pdf into a single pdf
