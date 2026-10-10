@@ -56,6 +56,8 @@ class Progress:
         self.layout_seconds = None
         self.write_started = None
         self.stage = None
+        self.parts_total = 0      # > 0 when rendering in parts (see parts.py)
+        self.parts_done = 0
         self.last_page = 0
         self.last_draw = 0.0
         self.last_bucket = 0
@@ -80,13 +82,15 @@ class Progress:
     def _tick(self, interval):
         while not self.stopped.wait(interval):
             with self.lock:
-                if self.stage in ("preparing", "writing"):
+                if self.stage in ("preparing", "writing", "assembling"):
                     self._draw_silent_stage()
 
     def _draw_silent_stage(self):
         now = time.monotonic()
         if self.stage == "preparing":
             self._status(f"[1/3] Preparing layout…  {_clock(now - self.started)} elapsed")
+        elif self.stage == "assembling":
+            self._status(f"[3/3] Joining {self.parts_total} parts…  {_clock(now - self.started)} elapsed")
         else:
             text = f"[3/3] Writing PDF…  {_clock(now - self.started)} elapsed"
             if self.layout_seconds is not None:
@@ -99,9 +103,30 @@ class Progress:
             self.stage = "preparing"
             self._draw_silent_stage()
 
-    def page(self, number):
+    def parts(self, total, jobs):
+        """Switch to parts mode: pages are counted across all parts."""
         with self.lock:
-            if number <= self.last_page:  # repagination revisits earlier pages
+            self.parts_total = total
+            self.WRITE_RATIO = 0.1  # per-part writing is included in the page rate; joining is quick
+            self._write(f"  in {total} parts of ~{max(1, round(self.estimate / total))} pages, {jobs} at a time\n")
+
+    def part_done(self, pages_so_far):
+        with self.lock:
+            self.parts_done += 1
+            self.last_draw = 0.0
+        self.page(pages_so_far, force=True)
+
+    def assembling(self):
+        with self.lock:
+            self.stage = "assembling"
+            self._draw_silent_stage()
+
+    def writing_final(self):
+        pass  # joining and writing are one stage in parts mode
+
+    def page(self, number, force=False):
+        with self.lock:
+            if number < self.last_page or (number == self.last_page and not force):  # repagination revisits pages
                 return
             now = time.monotonic()
             if self.layout_started is None:
@@ -113,21 +138,27 @@ class Progress:
 
             fraction = min(number / self.estimate, 1.0)
             if self.tty:
-                if now - self.last_draw < self.MIN_INTERVAL and number != self.estimate:
+                if now - self.last_draw < self.MIN_INTERVAL and number != self.estimate and not force:
                     return
                 self.last_draw = now
                 filled = int(fraction * self.BAR_WIDTH)
                 bar = "█" * filled + "░" * (self.BAR_WIDTH - filled)
                 per_page = (now - self.layout_started) / number
                 left = per_page * (self.estimate - number) + self.WRITE_RATIO * per_page * self.estimate
-                self._status(f"[2/3] Laying out page {number:,} of ~{self.estimate:,}  [{bar}] {int(fraction * 100):3d}%  "
-                             f"{_clock(now - self.started)} elapsed, ~{_clock(left)} left")
+                self._status(f"[2/3] {self._verb()} page {number:,} of ~{self.estimate:,}  [{bar}] {int(fraction * 100):3d}%  "
+                             f"{_clock(now - self.started)} elapsed, ~{_clock(left)} left{self._parts_note()}")
             else:
                 bucket = int(fraction * 10)
                 if bucket > self.last_bucket:
                     self.last_bucket = bucket
-                    self._status(f"[2/3] Laying out page {number:,} of ~{self.estimate:,} ({bucket * 10}%), "
-                                 f"{_clock(now - self.started)} elapsed")
+                    self._status(f"[2/3] {self._verb()} page {number:,} of ~{self.estimate:,} ({bucket * 10}%), "
+                                 f"{_clock(now - self.started)} elapsed{self._parts_note()}")
+
+    def _verb(self):
+        return "Rendering" if self.parts_total else "Laying out"
+
+    def _parts_note(self):
+        return f"  (parts done: {self.parts_done}/{self.parts_total})" if self.parts_total else ""
 
     def writing(self):
         with self.lock:
