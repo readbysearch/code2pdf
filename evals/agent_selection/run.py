@@ -43,7 +43,9 @@ for _case in FIXTURE_CASES:
     _case["set"] = "fixtures"
 for _case in real_cases.REAL_CASES:
     _case["set"] = "real"
-CASES = FIXTURE_CASES + real_cases.REAL_CASES
+for _case in real_cases.SCALE_CASES:
+    _case["set"] = "scale"
+CASES = FIXTURE_CASES + real_cases.REAL_CASES + real_cases.SCALE_CASES
 BY_ID = {case["id"]: case for case in CASES}
 
 RESULTS = os.path.join(HERE, "results")
@@ -59,7 +61,13 @@ so don't ask; just get it right. Don't change or add anything inside the project
 # --- split -------------------------------------------------------------------------------
 
 def split():
-    """Fixed random train/test split, stratified by project so both sets cover every layout."""
+    """The frozen train/test split in split.json; without it, a seeded random split stratified
+    by project (how split.json was made)."""
+    frozen = os.path.join(HERE, "split.json")
+    if os.path.exists(frozen):
+        with open(frozen) as f:
+            data = json.load(f)
+        return sorted(data["train"]), sorted(data["test"])
     rng = random.Random(SPLIT_SEED)
     train, test = [], []
     for name in sorted({c["project"] for c in CASES}):
@@ -81,13 +89,19 @@ def select(which, case_set="all"):
 
 # --- install a clean copy of code2pdf -----------------------------------------------------
 
-def install_copy(dest):
-    """bin/, scripts/, fonts/ and a copy of .venv, with nothing that names this repository."""
+def install_copy(dest, ref=None):
+    """bin/, scripts/, fonts/ (from the working tree, or from git REF such as v3.8) and a copy
+    of .venv, with nothing that names this repository."""
     os.makedirs(dest)
-    for name in ("bin", "scripts", "fonts"):
-        shutil.copytree(os.path.join(REPO, name), os.path.join(dest, name),
-                        ignore=shutil.ignore_patterns("__pycache__"))
-    commit = subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"],
+    if ref:
+        archive = subprocess.run(["git", "-C", REPO, "archive", ref, "bin", "scripts", "fonts"],
+                                 capture_output=True, check=True).stdout
+        subprocess.run(["tar", "-x", "-C", dest], input=archive, check=True)
+    else:
+        for name in ("bin", "scripts", "fonts"):
+            shutil.copytree(os.path.join(REPO, name), os.path.join(dest, name),
+                            ignore=shutil.ignore_patterns("__pycache__"))
+    commit = subprocess.run(["git", "-C", REPO, "rev-parse", "--short", ref or "HEAD"],
                             capture_output=True, text=True).stdout.strip()
     with open(os.path.join(dest, "VERSION"), "w") as f:
         f.write(f"v3.9-eval-g{commit}|{commit}|{datetime.date.today().isoformat()}\n")
@@ -109,10 +123,11 @@ def install_copy(dest):
     return os.path.join(dest, "bin")
 
 
-def subject_env(bin_dir):
+def subject_env(bin_dir, scale=False):
     env = {k: v for k, v in os.environ.items() if not k.startswith(("CODE2PDF_", "CLAUDE", "VIRTUAL_ENV"))}
     env["PATH"] = bin_dir + os.pathsep + "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-    env["CODE2PDF_JOBS"] = "1"  # several runs render at once; keep each to ~1.3 GB
+    if not scale:
+        env["CODE2PDF_JOBS"] = "1"  # several runs render at once; keep each to ~1.3 GB
     return env
 
 
@@ -207,17 +222,17 @@ def run_one(case, rep, args, bin_dir, transcripts):
         started = time.time()
         infra = None
         try:
-            env = subject_env(bin_dir)
+            env = subject_env(bin_dir, scale=case.get("scale", False))
             env["TMPDIR"] = os.path.join(workdir, "tmp")  # mktemp stays private to this run
             os.makedirs(env["TMPDIR"])
-            proc = subprocess.run(cmd, cwd=project, env=env, capture_output=True,
-                                  text=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL)
+            proc = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True,
+                                  timeout=TIMEOUT * (3 if case.get("scale") else 1), stdin=subprocess.DEVNULL)
             stream, code = proc.stdout, proc.returncode
             if code != 0:
                 infra = f"claude exited {code}: {proc.stderr.strip()[-300:]}"
         except subprocess.TimeoutExpired as e:
             stream = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
-            infra = f"timeout after {TIMEOUT}s"
+            infra = f"eval timeout ({TIMEOUT * (3 if case.get('scale') else 1)}s)"
         elapsed = time.time() - started
         with open(os.path.join(transcripts, f"{case['id']}-{rep}.jsonl"), "w") as f:
             f.write(stream)
@@ -227,10 +242,11 @@ def run_one(case, rep, args, bin_dir, transcripts):
         result = grade(case, output, before, projects.snapshot(project))
         # Runs share the machine's /tmp: a fixed name like /tmp/files.txt can be overwritten
         # by a concurrent run, which is the eval's fault, not the agent's
-        if not result["pass"] and not infra and any(re.search(r"(?<![\w.])/tmp/[\w.-]+", c)
+        if not result["pass"] and not infra and args.jobs > 1 and any(re.search(r"(?<![\w.])/tmp/[\w.-]+", c)
                                                     for c in stats["commands"]):
             infra = "suspected collision: used a fixed /tmp file while other runs were going"
         return {"case": case["id"], "rep": rep, "model": args.model, "effort": args.effort,
+                "started": round(started),
                 "seconds": round(elapsed, 1), "infra_error": infra, **stats, **result}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
@@ -263,9 +279,9 @@ def cmd_run(args):
     transcripts = os.path.join(out_dir, "transcripts")
     os.makedirs(transcripts, exist_ok=True)
     install = tempfile.mkdtemp(prefix="c2p-install-")
-    bin_dir = install_copy(os.path.join(install, "code2pdf"))
+    bin_dir = install_copy(os.path.join(install, "code2pdf"), args.ref)
     with open(os.path.join(out_dir, "meta.json"), "w") as f:
-        json.dump({"label": args.label, "model": args.model, "effort": args.effort, "repeats": args.repeats,
+        json.dump({"label": args.label, "model": args.model, "ref": args.ref, "effort": args.effort, "repeats": args.repeats,
                    "cases": ids, "split": args.split, "started": datetime.datetime.now().isoformat(),
                    "commit": subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"],
                                             capture_output=True, text=True).stdout.strip(),
@@ -293,6 +309,36 @@ def cmd_run(args):
     report([args.label])
 
 
+def cmd_rerun_infra(args):
+    """Run again, one at a time, every run of LABEL that hit an infrastructure error (API error,
+    timeout, suspected /tmp collision), and replace those records with the new verdicts."""
+    out_dir = os.path.join(RESULTS, args.label)
+    with open(os.path.join(out_dir, "meta.json")) as f:
+        meta = json.load(f)
+    runs = load(args.label)
+    flagged = [r for r in runs if r["infra_error"]]
+    print(f"{args.label}: re-running {len(flagged)} runs one at a time")
+    run_args = argparse.Namespace(model=meta["model"], effort=meta["effort"], jobs=1,
+                                  max_budget=args.max_budget)
+    install = tempfile.mkdtemp(prefix="c2p-install-")
+    bin_dir = install_copy(os.path.join(install, "code2pdf"), meta.get("ref"))
+    transcripts = os.path.join(out_dir, "transcripts")
+    replaced = {}
+    for r in flagged:
+        new = run_one(BY_ID[r["case"]], r["rep"], run_args, bin_dir, transcripts)
+        new["rerun_of"] = r["infra_error"]
+        replaced[(r["case"], r["rep"])] = new
+        print(f"  {'PASS' if new['pass'] else 'fail'} {r['case']}#{r['rep']} {describe_failure(new)}", flush=True)
+    shutil.rmtree(install, ignore_errors=True)
+    with open(os.path.join(out_dir, "runs.infra.jsonl"), "a") as f:
+        for r in flagged:
+            f.write(json.dumps(r) + "\n")
+    with open(os.path.join(out_dir, "runs.jsonl"), "w") as f:
+        for r in runs:
+            f.write(json.dumps(replaced.get((r["case"], r["rep"]), r)) + "\n")
+    report([args.label])
+
+
 def describe_failure(r):
     parts = []
     if r.get("infra_error"):
@@ -317,7 +363,7 @@ def cmd_check(args):
     the grader gives the same verdict twice."""
     install = tempfile.mkdtemp(prefix="c2p-install-")
     bin_dir = install_copy(os.path.join(install, "code2pdf"))
-    env = subject_env(bin_dir)
+    env = subject_env(bin_dir, scale=True)
     env["CODE2PDF_QUIET"] = "1"
     train, test = split()
     print(f"split (seed {SPLIT_SEED}): {len(train)} train, {len(test)} test")
@@ -353,7 +399,8 @@ def cmd_check(args):
             naive = subprocess.run(["code2pdf", "-a", ".", "--list-files"], cwd=project, env=env,
                                    capture_output=True, text=True).stdout.split("\n")
             naive = [line for line in naive if line]
-            if (naive == case["expected"] if case.get("ordered") else sorted(naive) == sorted(case["expected"])):
+            if not case.get("scale") and (naive == case["expected"] if case.get("ordered")
+                                          else sorted(naive) == sorted(case["expected"])):
                 problems.append("the naive `code2pdf -a .` passes")
             status = "ok " if not problems else "BAD"
             bad += bool(problems)
@@ -486,7 +533,11 @@ def main():
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--split", default="all", help="train, test, all, or comma-separated case ids")
     p.add_argument("--set", default="all", help="fixtures, real or all")
+    p.add_argument("--ref", default=None, help="test code2pdf as of this git ref (default: working tree)")
     p.add_argument("--jobs", type=int, default=6)
+    p.add_argument("--max-budget", type=float, default=1.0)
+    p = sub.add_parser("rerun-infra")
+    p.add_argument("label")
     p.add_argument("--max-budget", type=float, default=1.0)
     p = sub.add_parser("report")
     p.add_argument("labels", nargs="+")
@@ -495,6 +546,8 @@ def main():
         return cmd_check(args)
     if args.command == "run":
         return cmd_run(args)
+    if args.command == "rerun-infra":
+        return cmd_rerun_infra(args)
     report(args.labels)
     return 0
 

@@ -76,7 +76,8 @@ The surface is the text an agent reads: `--help`, warnings, errors. These are ch
 change and revert, and a change in score traces back to them. CLI behaviour changes are
 allowed when a failure shows a real gap, and they get unit tests like any other change.
 
-- The split is fixed (seed 2026, stratified by project): 26 train cases, 16 test cases.
+- The split is frozen in `split.json` (made with seed 2026, stratified by project): 26 train
+  cases, 16 test cases. New cases are added to one side explicitly, never reshuffled.
   Read train transcripts only.
 - Each round makes one change aimed at a root cause, then runs train and test with 3 repeats.
   - Keep it if train goes up and test doesn't go down.
