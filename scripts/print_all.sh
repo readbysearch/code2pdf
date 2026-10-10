@@ -22,6 +22,10 @@ IGNORE_TYPES=${9:-''}  # Comma-separated list of file extensions to ignore
 IGNORE_FOLDERS=${10:-''}  # Additional folders to skip
 INCLUDE_TYPES=${11:-''}  # If specified, only include these types
 
+# Private per-run work directory, so we never touch (or merge) other files in /tmp
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/code2pdf.XXXXXX") || { echo "Error: cannot create work directory" >&2; exit 1; }
+trap 'rm -rf "$WORK_DIR"' EXIT
+
 vim --version >&2
 echo "DEBUG: Starting script execution..." >&2
 echo "DEBUG: Working directory: $(pwd)" >&2
@@ -90,7 +94,7 @@ should_process_file() {
 echo "printing all src files in $ROOT_DIR"
 
 ##########################################3
-# Step 1. Print all src files into /tmp/ 
+# Step 1. Print all src files into $WORK_DIR
 ##########################################3
 
 # Change src/components/Task.js to src____components____Task----js
@@ -110,13 +114,13 @@ print_to_pdf () {
         echo "Error: pdf_name is empty."
         exit 1
     fi
-    echo "DEBUG: generated pdf_name in /tmp folder: $pdf_name" >&2
+    echo "DEBUG: generated pdf_name in $WORK_DIR: $pdf_name" >&2
 
     # Get relative path from ROOT_DIR for display in PDF header
     relative_path=$(realpath --relative-to="$ROOT_DIR" "$file_name")
 
     # Convert using Python script with UTF-8 support
-    python3 "$SCRIPT_DIR/code_to_pdf.py" "$file_name" "/tmp/$pdf_name.pdf" "$relative_path"
+    python3 "$SCRIPT_DIR/code_to_pdf.py" "$file_name" "$WORK_DIR/$pdf_name.pdf" "$relative_path"
 
     if [ $? -ne 0 ]; then
         echo "Error: Failed to convert $file_name to PDF" >&2
@@ -230,8 +234,6 @@ print_files_in_a_folder() {
     done
 }
 
-rm /tmp/*.ps
-rm /tmp/*.pdf
 print_files_in_a_folder "$ROOT_DIR"
 
 
@@ -246,8 +248,7 @@ generate_orig_file_name () {
     echo "$output"
 }
 
-cd /tmp
-rm table_of_contents
+cd "$WORK_DIR"
 touch table_of_contents
 
 echo "generating the table of contents"
@@ -262,7 +263,7 @@ cat table_of_contents >&2
 python3 "$SCRIPT_DIR/code_to_pdf.py" table_of_contents 00_table_of_contents.pdf "Table of Contents"
 
 ##########################################3
-# Step 3. Merge all /tmp/*.pdf into a single pdf
+# Step 3. Merge all $WORK_DIR/*.pdf into a single pdf
 ##########################################3
 echo "Debug: Starting final merge step..." >&2
 echo "Debug: Current working directory: $(pwd)" >&2
@@ -274,20 +275,20 @@ rm -f "$ROOT_DIR/merged.pdf"
 
 # Merge PDFs with explicit error checking
 echo "merging all pdf files into a single file named merged.pdf" >&2
-if ! gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=/tmp/merged.pdf /tmp/*.pdf >&2; then
+if ! gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile="$WORK_DIR/merged.pdf" "$WORK_DIR"/*.pdf >&2; then
     echo "Error: PDF merge failed" >&2
     exit 1
 fi
 
 # Check if merge was successful
-if [ ! -f "/tmp/merged.pdf" ]; then
+if [ ! -f "$WORK_DIR/merged.pdf" ]; then
     echo "Error: Merged PDF was not created" >&2
     exit 1
 fi
 
 # Move with explicit error checking
 echo "Debug: Moving merged PDF to final location" >&2
-if ! mv "/tmp/merged.pdf" "$ROOT_DIR/merged.pdf"; then
+if ! mv "$WORK_DIR/merged.pdf" "$ROOT_DIR/merged.pdf"; then
     echo "Error: Failed to move merged PDF" >&2
     exit 1
 fi

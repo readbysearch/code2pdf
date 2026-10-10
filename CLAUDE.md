@@ -224,7 +224,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 - **Include-types**: When specified, overrides ignore-types and only processes specified extensions
 
 ### code2pdf Processing Flow
-1. Clean `/tmp` directory of existing PDF files
+1. Create a private per-run work directory (`mktemp -d`), removed on exit
 2. Recursively traverse directories applying filtering rules
 3. Convert each qualifying file to PDF using Python script
 4. Generate table of contents from processed files
@@ -244,7 +244,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 - Uses Python/Pygments for syntax highlighting with full UTF-8 support
 - File path transformations use Perl regex: `/` → `____`, `.` → `----`
 - Symbolic link recursion is prevented by tracking visited real paths
-- All intermediate files are stored in `/tmp` before final merge
+- All intermediate files are stored in a private `mktemp -d` work directory before final merge; other files in `/tmp` are never touched
 - Error handling includes explicit checks for PDF creation and file moves
 - Debug output is sent to stderr to avoid interfering with normal operation
 - Filtering logic now matches code2txt for consistency
@@ -263,7 +263,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 
 **Whitespace in paths**: All scripts properly quote variables to handle spaces in file/folder names.
 
-**Temporary files**: Scripts use `/tmp/` for intermediate PDF files. `print_all.sh` cleans up at the start.
+**Temporary files**: `print_all.sh` writes intermediate PDFs to its own `mktemp -d` directory (under `$TMPDIR`) and deletes it on exit, so concurrent runs and unrelated PDFs in `/tmp` are safe.
 
 **Output location**:
 - Single file: PDF goes to current working directory
