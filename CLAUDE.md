@@ -17,9 +17,16 @@ and lessons that were expensive to learn.
   - `-s FILE` → `scripts/print_single_file_to_pdf.sh` → `code_to_pdf.py` → `dir_to_pdf.render_document(contents=False)`
   - `-a DIR` → `scripts/print_all.sh` (validates DIR, refuses the pre-v3.8 vimrc argument) → `dir_to_pdf.py`
 - `dir_to_pdf.py`: `Selector` + `collect_files` choose files (depth-first, sorted by name, hidden
-  entries skipped, symlink loops cut, the output file never included); `source_info` gets git
-  dates; `build_sections`/`build_contents`/`wrap_document` build the HTML; `render_document`
+  entries skipped, symlink loops cut, the output file and binary files never included), or
+  `read_file_list` takes them from `--files-from`; `source_info` gets git dates;
+  `build_sections`/`build_contents`/`wrap_document` build the HTML; `render_document`
   renders it, or hands big documents to `parts.py`.
+- Selection precedence: `--exclude` > `--include` > default rules (built-in lists, `--ignore-*`,
+  `--include-types`). `Pattern.may_reach` decides whether to enter a normally skipped folder:
+  only a literal glob segment may name one, so `*`/`**` never pull in `node_modules` or `.git`.
+  Contents-page groups are consecutive runs of one folder (`group_by_folder`), never merged.
+- `bin/code2pdf` rejects unknown options and options without a value; list options add up when
+  repeated. Agents depend on these errors to notice a mistyped option.
 - `theme.py`: themes (`paper`, `mono`, any Pygments style), `@font-face` for `fonts/`, page CSS.
   `progress.py`: page estimate and the [1/3]–[3/3] display. `version.py`: `--version`.
 - Default file selection lives in `bin/code2pdf` (`DEFAULT_*`); `print_all.sh` passes the same

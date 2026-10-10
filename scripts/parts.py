@@ -197,10 +197,7 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
         # Global page numbers: contents first, then the parts in order
         progress.assembling()
         sections_lines = sum(dir_to_pdf.count_lines(sources[path]) for _, path in entries)
-        groups = {}
-        for i, (rel, _) in enumerate(entries):
-            folder, name = os.path.split(rel)
-            groups.setdefault(folder, []).append((i, name))
+        groups = dir_to_pdf.group_by_folder([rel for rel, _ in entries])
         part_offsets, offset = [], 0
         for result in results:
             part_offsets.append(offset)

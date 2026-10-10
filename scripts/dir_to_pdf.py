@@ -9,10 +9,18 @@ Usage (positional arguments match print_all.sh):
                 [--list-files] [--theme NAME]
   dir_to_pdf.py --list-themes
 
-  --list-files   Print the selected files (relative to ROOT) instead of rendering.
-  --theme NAME   paper (default), mono, or any Pygments style; default from $CODE2PDF_THEME.
-  --quiet        No progress output (also $CODE2PDF_QUIET).
-  --list-themes  Print every theme name.
+  --list-files       Print the selected files (relative to ROOT) instead of rendering.
+  --include GLOB     Also include matching files, even hidden ones or ones in skipped folders.
+  --exclude GLOB     Leave out matching files and folders; wins over everything else.
+  --files-from FILE  Convert exactly the files listed in FILE (- for stdin), in that order.
+  --output PDF       Write here instead of OUTPUT (a folder gets merged.pdf inside it).
+  --theme NAME       paper (default), mono, or any Pygments style; default from $CODE2PDF_THEME.
+  --quiet            No progress output (also $CODE2PDF_QUIET).
+  --list-themes      Print every theme name.
+
+Globs: * and ? match within a name, ** matches any number of folders. A glob without "/"
+matches a name at any depth (*_test.go); one with "/" matches the path from ROOT
+(src/legacy, docs/**/*.md). A glob that matches a folder covers everything in it.
 
 Dates: the contents page says when the PDF was printed ($SOURCE_DATE_EPOCH overrides "now")
 and, in a git repository, which commit; each file shows its last commit date, "uncommitted
@@ -28,7 +36,6 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections import OrderedDict
 
 
 def split_list(value):
@@ -40,10 +47,73 @@ def split_extension(name):
     return name.rsplit(".", 1)[1] if "." in name else ""
 
 
-class Selector:
-    """File selection rules, kept identical to the previous bash implementation."""
+class Pattern:
+    """An --include/--exclude glob, matched against paths relative to ROOT split into names."""
 
-    def __init__(self, args):
+    def __init__(self, text, root):
+        self.text = text
+        path = text.strip()
+        if os.path.isabs(path) and (path + "/").startswith(root.rstrip("/") + "/"):
+            path = os.path.relpath(path, root)
+        while path.startswith("./"):
+            path = path[2:]
+        path = path.rstrip("/")
+        anchored = "/" in path
+        self.segments = [part for part in path.split("/") if part not in ("", ".")]
+        if not self.segments:
+            raise ValueError(f"empty pattern: {text!r}")
+        if not anchored:
+            self.segments.insert(0, "**")
+        self.used = False
+
+    def covers(self, parts):
+        """True if the pattern matches PARTS or one of its folders."""
+        hit = any(_glob_match(self.segments, parts[:n]) for n in range(1, len(parts) + 1))
+        self.used = self.used or hit
+        return hit
+
+    def may_reach(self, parts, skipped):
+        """Could the pattern match PARTS (a folder) or something below it? A folder that is
+        normally skipped (SKIPPED[i]) must be named literally: * never pulls in node_modules or .git."""
+        return _glob_reach(self.segments, parts, skipped)
+
+
+def _name_match(name, glob):
+    """fnmatch, but like the shell a wildcard doesn't match a leading dot (* skips .env)."""
+    return fnmatch.fnmatchcase(name, glob) and (glob.startswith(".") or not name.startswith("."))
+
+
+def _glob_match(pattern, parts):
+    if not pattern:
+        return not parts
+    if pattern[0] == "**":
+        return any(_glob_match(pattern[1:], parts[i:]) for i in range(len(parts) + 1))
+    return bool(parts) and _name_match(parts[0], pattern[0]) and _glob_match(pattern[1:], parts[1:])
+
+
+def _glob_reach(pattern, parts, skipped):
+    if not parts or not pattern:  # inside the folder, or the pattern already matched a parent
+        return True
+    if pattern[0] == "**":
+        return (_glob_reach(pattern[1:], parts, skipped)
+                or (not skipped[0] and _glob_reach(pattern, parts[1:], skipped[1:])))
+    ok = parts[0] == pattern[0] if skipped[0] else _name_match(parts[0], pattern[0])
+    return ok and _glob_reach(pattern[1:], parts[1:], skipped[1:])
+
+
+def is_binary(path):
+    try:
+        with open(path, "rb") as f:
+            return b"\0" in f.read(8192)
+    except OSError:
+        return False
+
+
+class Selector:
+    """File selection. The default rules (built-in lists, --ignore-*, --include-types) are kept
+    identical to the previous bash implementation; --include adds to them and --exclude wins."""
+
+    def __init__(self, args, root=""):
         self.blacklist = set(json.loads(args.blacklist_json or "[]"))
         self.pattern = args.blacklist_pattern
         self.extensions = set(json.loads(args.extensions_json or "[]"))
@@ -53,6 +123,22 @@ class Selector:
         self.ignore_types = set(split_list(args.ignore_types))
         self.ignore_folders = set(split_list(args.ignore_folders))
         self.include_types = set(split_list(args.include_types))
+        self.includes = [Pattern(text, root) for text in getattr(args, "include", None) or []]
+        self.excludes = [Pattern(text, root) for text in getattr(args, "exclude", None) or []]
+
+    def excluded(self, parts):
+        return any([pattern.covers(parts) for pattern in self.excludes])  # list: mark every match used
+
+    def included(self, parts):
+        return any([pattern.covers(parts) for pattern in self.includes])
+
+    def may_include_below(self, parts):
+        skipped = [name.startswith(".") or self.skip_folder(name) for name in parts]
+        return any(pattern.may_reach(parts, skipped) for pattern in self.includes)
+
+    def unused_patterns(self):
+        return ([("--include", p.text) for p in self.includes if not p.used]
+                + [("--exclude", p.text) for p in self.excludes if not p.used])
 
     def skip_folder(self, name):
         return (name in self.blacklist or name in self.ignore_folders
@@ -72,32 +158,76 @@ class Selector:
 
 
 def collect_files(root, selector, exclude):
-    """Depth-first walk, entries sorted by name; hidden entries skipped; symlink loops cut."""
+    """Depth-first walk, entries sorted by name; hidden entries skipped unless --include names
+    them; symlink loops cut. Inside a normally skipped folder only --include matches count."""
     visited = {os.path.realpath(root)}
     selected = []
 
-    def walk(folder):
+    def walk(folder, parts, forced):
         try:
             entries = sorted(os.listdir(folder))
         except OSError as e:
             print(f"Warning: cannot read {folder}: {e}", file=sys.stderr)
             return
         for name in entries:
-            if name.startswith("."):
-                continue
             path = os.path.join(folder, name)
+            rel_parts = parts + [name]
             if os.path.isdir(path):
                 real = os.path.realpath(path)
-                if real in visited or selector.skip_folder(name):
+                if real in visited or selector.excluded(rel_parts):
+                    continue
+                skipped = forced or name.startswith(".") or selector.skip_folder(name)
+                if skipped and not selector.may_include_below(rel_parts):
                     continue
                 visited.add(real)
-                walk(path)
+                walk(path, rel_parts, skipped)
             elif os.path.isfile(path):
-                if os.path.realpath(path) in exclude or not selector.wants_file(name):
+                if os.path.realpath(path) in exclude or selector.excluded(rel_parts):
                     continue
-                selected.append(os.path.relpath(path, root))
+                default = not forced and not name.startswith(".") and selector.wants_file(name)
+                if (selector.included(rel_parts) or default) and not skip_binary(path, root):
+                    selected.append(os.path.relpath(path, root))
 
-    walk(root)
+    walk(root, [], False)
+    return selected
+
+
+def skip_binary(path, root):
+    if is_binary(path):
+        print(f"Skipping binary file: {os.path.relpath(path, root)}", file=sys.stderr)
+        return True
+    return False
+
+
+def read_file_list(source, root, selector, exclude):
+    """Files named in SOURCE (- for stdin), one per line, relative to ROOT (or the current
+    folder) or absolute, kept in the given order. Only exclusions and binary checks apply."""
+    try:
+        text = sys.stdin.read() if source == "-" else open(source, encoding="utf-8").read()
+    except OSError as e:
+        raise ValueError(f"cannot read --files-from {source}: {e.strerror}")
+    selected, seen, problems = [], set(), []
+    for line in text.splitlines():
+        name = line.strip()
+        if not name:
+            continue
+        path = name if os.path.isabs(name) else os.path.join(root, name)
+        if not os.path.exists(path) and not os.path.isabs(name) and os.path.exists(name):
+            path = name  # relative to the current folder
+        path = os.path.abspath(path)
+        rel = os.path.relpath(path, root)
+        if not os.path.isfile(path):
+            problems.append(f"not a file: {name}")
+        elif rel == ".." or rel.startswith(".." + os.sep):
+            problems.append(f"outside {root}: {name}")
+        elif rel not in seen:
+            seen.add(rel)
+            if (os.path.realpath(path) in exclude or selector.excluded(rel.split(os.sep))
+                    or skip_binary(path, root)):
+                continue
+            selected.append(rel)
+    if problems:
+        raise ValueError("--files-from: " + "; ".join(problems))
     return selected
 
 
@@ -240,14 +370,13 @@ def count_lines(source):
 
 
 def build_sections(entries, theme, info, sources=None, first_index=0):
-    """One <section> per file. Returns (sections, groups, total_lines, style_defs), where groups maps
-    folder -> [(index, file name)] for the contents page; indexes start at FIRST_INDEX."""
+    """One <section> per file. Returns (sections, groups, total_lines, style_defs), where groups is
+    group_by_folder() for the contents page; indexes start at FIRST_INDEX."""
     from pygments import highlight
     from pygments.formatters import HtmlFormatter
     from code_to_pdf import lexer_for, read_source
 
     formatter = HtmlFormatter(style=theme.style, linespans="L", cssclass="highlight")
-    groups = OrderedDict()
     sections = []
     total_lines = 0
     for i, (rel, path) in enumerate(entries, first_index):
@@ -256,7 +385,6 @@ def build_sections(entries, theme, info, sources=None, first_index=0):
         lines = count_lines(source)
         total_lines += lines
         folder, name = os.path.split(rel)
-        groups.setdefault(folder, []).append((i, name))
         code = highlight(source, lexer, formatter).replace('id="L-', f'id="f{i}-L-')
         folder_html = f'<div class="dir">{html.escape(folder)}/</div>' if folder else ""
         language = "Plain text" if lexer.name == "Text only" else lexer.name
@@ -267,7 +395,21 @@ def build_sections(entries, theme, info, sources=None, first_index=0):
             f'<section class="file"><header>{folder_html}'
             f'<h1 id="f{i}" data-path="{html.escape(rel)}">{html.escape(name)}</h1>'
             f'<div class="meta">{html.escape(details)}</div></header>{code}</section>')
+    groups = group_by_folder([rel for rel, _ in entries], first_index)
     return sections, groups, total_lines, formatter.get_style_defs(".highlight")
+
+
+def group_by_folder(rels, first_index=0):
+    """[(folder, [(index, file name)])] in document order. A folder that comes back later (a
+    root file after a subfolder, or a --files-from list) gets a new heading, so the contents
+    page always follows page order."""
+    groups = []
+    for i, rel in enumerate(rels, first_index):
+        folder, name = os.path.split(rel)
+        if not groups or groups[-1][0] != folder:
+            groups.append((folder, []))
+        groups[-1][1].append((i, name))
+    return groups
 
 
 def build_contents(project, file_count, total_lines, printed, info, groups, page_numbers=None):
@@ -281,7 +423,7 @@ def build_contents(project, file_count, total_lines, printed, info, groups, page
 
     toc = "".join(
         f'<h2>{html.escape((folder or project) + "/")}</h2><ol>{"".join(entry(i, n) for i, n in items)}</ol>'
-        for folder, items in groups.items())
+        for folder, items in groups)
     printed_line = f"Printed {printed}" + (f" {info.summary}" if info.summary else "")
     return (f'<nav class="toc"><h1>{html.escape(project)}</h1>'
             f'<p class="summary">{file_count:,} file{"s" if file_count != 1 else ""}, '
@@ -434,6 +576,10 @@ def parse_args(argv):
                  "ignore_folders", "include_types"):
         parser.add_argument(name, nargs="?", default="")
     parser.add_argument("--list-files", action="store_true")
+    parser.add_argument("--include", action="append", default=[])
+    parser.add_argument("--exclude", action="append", default=[])
+    parser.add_argument("--files-from")
+    parser.add_argument("--output", dest="output_option")
     parser.add_argument("--list-themes", action="store_true")
     parser.add_argument("--theme", default=os.environ.get("CODE2PDF_THEME", "paper"))
     parser.add_argument("--quiet", action="store_true", default=bool(os.environ.get("CODE2PDF_QUIET")))
@@ -452,9 +598,26 @@ def main(argv=None):
     if not os.path.isdir(root):
         print(f"Error: directory not found: {args.root}", file=sys.stderr)
         return 1
-    output = os.path.abspath(args.output or os.path.join(root, "merged.pdf"))
+    output = os.path.abspath(args.output_option or args.output or os.path.join(root, "merged.pdf"))
+    if os.path.isdir(output):
+        output = os.path.join(output, "merged.pdf")
+    if args.files_from and args.include:
+        print("Error: --include has no effect with --files-from (the list is used as given)",
+              file=sys.stderr)
+        return 1
 
-    files = collect_files(root, Selector(args), exclude={os.path.realpath(output)})
+    try:
+        selector = Selector(args, root)
+        exclude = {os.path.realpath(output)}
+        if args.files_from:
+            files = read_file_list(args.files_from, root, selector, exclude)
+        else:
+            files = collect_files(root, selector, exclude)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    for option, text in selector.unused_patterns():
+        print(f"Warning: {option} {text!r} matched nothing", file=sys.stderr)
     if args.list_files:
         print("\n".join(files))
         return 0
@@ -463,6 +626,7 @@ def main(argv=None):
         return 1
 
     entries = [(rel, os.path.join(root, rel)) for rel in files]
+    os.makedirs(os.path.dirname(output), exist_ok=True)
     try:
         render_document(entries, output, theme_name=args.theme, project=os.path.basename(root),
                         contents=True, root=root, quiet=args.quiet, jobs=args.jobs)

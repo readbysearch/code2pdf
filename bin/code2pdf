@@ -4,6 +4,9 @@ IGNORE_FILES=""
 IGNORE_TYPES=""
 IGNORE_FOLDERS=""
 INCLUDE_TYPES=""
+OUTPUT=""
+FILES_FROM=""
+SELECT_ARGS=()   # --include/--exclude, passed on to dir_to_pdf.py
 
 # Resolve the install directory (the parent of this script's real bin/ dir), following symlinks
 resolve_install_dir() {
@@ -37,31 +40,61 @@ get_install_dir() {
 
 # Help text
 show_help() {
-   echo "Usage: code2pdf [OPTIONS] <file or directory>"
-   echo ""
-   echo "Options:"
-   echo "  -s, --single FILE         Convert a single file to PDF"
-   echo "  -a, --all DIR             Convert all source files in directory"
-   echo "  --ignore-types LIST       Comma-separated list of file extensions to ignore"
-   echo "  --ignore-folders LIST     Comma-separated list of folders to skip"
-   echo "  --ignore-files LIST       Comma-separated list of specific files to ignore"
-   echo "  --include-types LIST      Only include these file types (overrides default whitelist)"
-   echo "  --theme NAME              Colour theme: paper (default), mono (black & white), or any Pygments style"
-   echo "  --list-themes             List all theme names"
-   echo "  -q, --quiet               No progress output"
-   echo "  -j, --jobs N              Big directories render in parts; N parts at a time (default 3 with 16 GB RAM, ~1.3 GB each)"
-   echo "  --list-files              With -a: list the files that would be included, without converting"
-   echo "  -V, --version             Show the version, how it is installed, and library versions"
-   echo "  -h, --help                Show this help message"
-   echo ""
-   echo "Examples:"
-   echo "  code2pdf -s myfile.py                                        # Convert single file"
-   echo "  code2pdf -a src/                                             # Convert all files in directory"
-   echo "  code2pdf -a --ignore-files package-lock.json src/            # Ignore specific files"
-   echo "  code2pdf -a --ignore-types md,txt src/                       # Ignore file types"
-   echo "  code2pdf -a --include-types js,ts src/                       # Only include JS/TS files"
-   echo "  code2pdf -a --ignore-folders tests,docs src/                 # Skip folders"
-   echo "  code2pdf -a --theme mono src/                                # Black & white for printing"
+   cat <<'HELP'
+Usage: code2pdf [OPTIONS] -s FILE
+       code2pdf [OPTIONS] -a DIR
+
+Options:
+  -s, --single FILE         Convert one file to <name>.pdf in the current folder
+  -a, --all DIR             Convert the source files in DIR to DIR/merged.pdf, contents page first
+  -o, --output PDF          Write the PDF here instead (a folder: the default name inside it;
+                            missing folders are created)
+  --theme NAME              Colour theme: paper (default), mono (black & white), or any Pygments style
+  --list-themes             List all theme names
+  -q, --quiet               No progress output
+  -j, --jobs N              Big directories render in parts; N parts at a time (default 3 with 16 GB RAM, ~1.3 GB each)
+  -V, --version             Show the version, how it is installed, and library versions
+  -h, --help                Show this help message
+
+Choosing files for -a (every option can be repeated; LIST is comma-separated):
+  --list-files              List the files that would be included, in order, without converting
+  --include GLOB            Also include matching files of any type, even hidden ones or ones in
+                            skipped folders; a folder (--include config) brings every file in it
+  --exclude GLOB            Leave out matching files and folders (wins over everything else)
+  --files-from FILE         Convert exactly the files listed in FILE, one per line, in that order
+                            (- reads stdin; paths relative to DIR or absolute; DIR defaults to .)
+  --include-types LIST      Only include these extensions (replaces the default list)
+  --ignore-types LIST       Skip these extensions
+  --ignore-folders LIST     Skip folders with these names, at any depth
+  --ignore-files LIST       Skip files with these names, at any depth
+
+  By default -a includes common source code, Markdown, YAML and TOML, README, LICENSE, Makefile
+  and files without an extension (not JSON, .txt or other data files: add them with --include);
+  it skips hidden entries, binary files, node_modules, build,
+  dist, out, target, DerivedData, Pods, vendor, __pycache__, venv and env*.
+  Globs: * and ? match within a name (not a leading dot), ** matches any number of folders.
+  Without "/" a glob matches names at any depth (*_test.go); with "/" it matches the path from
+  DIR (src/legacy, docs/**/*.md). A glob that matches a folder covers everything in it. Skipped
+  folders are entered only when a glob names them (.github, node_modules/foo). A glob that
+  matches nothing prints a warning.
+
+Examples:
+  code2pdf -s myfile.py                                        # Convert one file
+  code2pdf -a src/                                             # Convert a directory
+  code2pdf -a . --exclude tests --exclude '*_test.*' --exclude '*.test.*' --list-files  # No tests; check first
+  code2pdf -a . --exclude src/legacy --include '*.json' --include .github
+  code2pdf -a . --include-types js,ts                          # Only JS/TS files
+  git ls-files src | code2pdf --files-from - -o src.pdf        # Exactly these files
+  code2pdf -a src/ --theme mono                                # Black & white for printing
+HELP
+}
+
+# Options that take a value: fail clearly instead of swallowing the next option
+need_value() {
+   if [ $# -lt 2 ] || [ -z "$2" ]; then
+       echo "Error: $1 needs a value (see code2pdf --help)" >&2
+       exit 1
+   fi
 }
 
 # Check dependencies
@@ -104,12 +137,9 @@ main() {
                # Kept for compatibility: the launcher now always uses the directory it is installed in
                shift
                ;;
-           --ignore-files)
-               IGNORE_FILES="$2"
-               shift 2
-               ;;
            --theme)
                # Read by scripts/dir_to_pdf.py and scripts/code_to_pdf.py
+               need_value "$@"
                export CODE2PDF_THEME="$2"
                shift 2
                ;;
@@ -118,24 +148,57 @@ main() {
                shift
                ;;
            -j|--jobs)
+               need_value "$@"
                export CODE2PDF_JOBS="$2"
+               shift 2
+               ;;
+           -o|--output)
+               need_value "$@"
+               OUTPUT="$2"
                shift 2
                ;;
            --list-files)
                LIST_FILES=1
                shift
                ;;
+           # Repeating a list option adds to it
+           --ignore-files)
+               need_value "$@"
+               IGNORE_FILES="${IGNORE_FILES:+$IGNORE_FILES,}$2"
+               shift 2
+               ;;
            --ignore-types)
-               IGNORE_TYPES="$2"
+               need_value "$@"
+               IGNORE_TYPES="${IGNORE_TYPES:+$IGNORE_TYPES,}$2"
                shift 2
                ;;
            --ignore-folders)
-               IGNORE_FOLDERS="$2"
+               need_value "$@"
+               IGNORE_FOLDERS="${IGNORE_FOLDERS:+$IGNORE_FOLDERS,}$2"
                shift 2
                ;;
            --include-types)
-               INCLUDE_TYPES="$2"
+               need_value "$@"
+               INCLUDE_TYPES="${INCLUDE_TYPES:+$INCLUDE_TYPES,}$2"
                shift 2
+               ;;
+           --include|--exclude)
+               need_value "$@"
+               SELECT_ARGS+=("$1" "$2")
+               shift 2
+               ;;
+           --files-from)
+               need_value "$@"
+               FILES_FROM="$2"
+               shift 2
+               ;;
+           -s|--single|-a|--all|--list-themes|-h|--help|-V|--version)
+               args+=("$1")
+               shift
+               ;;
+           -?*)
+               echo "Error: unknown option $1 (see code2pdf --help)" >&2
+               exit 1
                ;;
            *)
                # Store non-option arguments
@@ -147,6 +210,21 @@ main() {
 
    # Restore positional parameters from stored arguments
    set -- "${args[@]}"
+   # --files-from lists the files itself; DIR defaults to the current folder
+   if [ -n "$FILES_FROM" ] && [ $# -eq 0 ]; then
+       set -- -a .
+   fi
+   case "$1" in
+       -s|--single|-a|--all)
+           if [ $# -gt 2 ]; then
+               echo "Error: $1 takes one path; unexpected: ${*:3} (see code2pdf --help)" >&2
+               exit 1
+           fi ;;
+   esac
+   if [ -n "$FILES_FROM$LIST_FILES${SELECT_ARGS[*]}" ] && [[ "$1" != -a && "$1" != --all ]]; then
+       echo "Error: --files-from, --include, --exclude and --list-files work with -a DIR" >&2
+       exit 1
+   fi
    
    case "$1" in
        -s|--single|-a|--all|--list-themes) ;;
@@ -172,16 +250,19 @@ main() {
            ;;
        -s|--single)
            shift
-           "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "$1" "$(pwd)"
+           "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "$1" "$(pwd)" "$OUTPUT"
            ;;
        -a|--all)
            shift
-           # Build output, dependency caches and virtualenvs are skipped (hidden folders always are)
+           # Build output, dependency caches and virtualenvs are skipped, like hidden entries (unless --include names them)
            DEFAULT_BLACKLIST='["node_modules", ".git", "dist", "out", "build", "target", "DerivedData", "Pods", "vendor", "__pycache__", "venv"]'
            DEFAULT_BLACKLIST_PATTERN='env*'
            DEFAULT_WHITELIST_EXTENSIONS='["c", "h", "cc", "cpp", "cxx", "hh", "hpp", "m", "mm", "swift", "go", "rs", "zig", "java", "kt", "kts", "scala", "groovy", "gradle", "cs", "fs", "py", "rb", "php", "pl", "lua", "r", "jl", "dart", "ex", "exs", "erl", "hs", "ml", "clj", "js", "mjs", "cjs", "jsx", "ts", "tsx", "vue", "svelte", "html", "css", "scss", "sql", "proto", "graphql", "sh", "bash", "zsh", "fish", "ps1", "md", "rst", "yaml", "yml", "toml"]'
            DEFAULT_WHITELIST_FILES='["README", "LICENSE", "Makefile", "launch.json"]'
            DEFAULT_INCLUDE_NO_EXTENSION='true'
+           [ -n "$LIST_FILES" ] && SELECT_ARGS+=(--list-files)
+           [ -n "$OUTPUT" ] && SELECT_ARGS+=(--output "$OUTPUT")
+           [ -n "$FILES_FROM" ] && SELECT_ARGS+=(--files-from "$FILES_FROM")
            
            "$SCRIPTS_DIR/print_all.sh" "$1" \
                "$DEFAULT_BLACKLIST" \
@@ -193,7 +274,7 @@ main() {
                "$IGNORE_TYPES" \
                "$IGNORE_FOLDERS" \
                "$INCLUDE_TYPES" \
-               ${LIST_FILES:+--list-files}
+               "${SELECT_ARGS[@]}"
            ;;
    esac  # -h and unknown options were handled by the first case
 }

@@ -147,3 +147,39 @@ def test_jobs_option_renders_in_parts(linked_bin, temp_dir):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "2 at a time" in result.stderr
     assert (project / "merged.pdf").exists()
+
+
+def test_list_options_accumulate_and_globs_pass_through(linked_bin, temp_dir):
+    """Repeating --ignore-folders used to keep only the last one; --include/--exclude reach dir_to_pdf."""
+    project = temp_dir / "proj with space"
+    for rel in ["a.py", "tests/t.py", "docs/d.md", "src/legacy/old.py", "src/new.py", ".github/ci.yml"]:
+        path = project / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x\n")
+    result = run([str(linked_bin / "code2pdf"), "-a", str(project), "--ignore-folders", "tests",
+                  "--ignore-folders", "docs", "--exclude", "src/legacy", "--include", ".github",
+                  "--list-files"], temp_dir)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == [".github/ci.yml", "a.py", "src/new.py"]
+
+
+@pytest.mark.skipif(not repo_venv_has_deps(), reason="repo .venv lacks pygments/weasyprint")
+def test_files_from_stdin_and_output_option(linked_bin, temp_dir):
+    project = temp_dir / "proj"
+    project.mkdir()
+    (project / "a.py").write_text("print(1)\n")
+    (project / "b.txt").write_text("notes\n")
+    env = {"HOME": os.environ["HOME"], "PATH": isolated_path(temp_dir), "CODE2PDF_QUIET": "1"}
+    out = temp_dir / "out dir" / "picked.pdf"
+    result = subprocess.run([str(linked_bin / "code2pdf"), "--files-from", "-", "-o", str(out)],
+                            cwd=project, env=env, input="b.txt\na.py\n", capture_output=True,
+                            text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert out.read_bytes().startswith(b"%PDF-")
+    assert not (project / "merged.pdf").exists()
+
+    single = run([str(linked_bin / "code2pdf"), "-s", "proj/a.py", "-o", str(temp_dir / "out dir")],
+                 temp_dir)
+    assert single.returncode == 0, single.stdout + single.stderr
+    assert (temp_dir / "out dir" / "a.pdf").exists()
+    assert not (temp_dir / "a.pdf").exists()

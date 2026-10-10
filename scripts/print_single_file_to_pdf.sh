@@ -20,6 +20,7 @@ fi
 
 file_name="$1"
 vs_project_folder_name="$2"
+output="${3:-}"   # optional: the PDF path, or a folder for <name>.pdf
 
 # Function to generate a PDF file name
 generate_pdf_file_name() {
@@ -31,12 +32,17 @@ generate_pdf_file_name() {
 echo "Converting to a PDF file for $file_name"
 
 pdf_name=$(generate_pdf_file_name "$file_name")
+if [ -z "$output" ]; then
+    output="$vs_project_folder_name/$pdf_name.pdf"
+elif [ -d "$output" ]; then
+    output="${output%/}/$pdf_name.pdf"
+fi
 
 # Get the directory where this script is located
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Convert the file to PDF using Python script with UTF-8 support (it reports where the PDF went)
-if ! python3 "$script_dir/code_to_pdf.py" "$file_name" "$vs_project_folder_name/$pdf_name.pdf" "$file_name"; then
+if ! python3 "$script_dir/code_to_pdf.py" "$file_name" "$output" "$file_name"; then
     echo "Error: Failed to create PDF" >&2
     exit 1
 fi

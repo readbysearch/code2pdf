@@ -118,17 +118,59 @@ code2pdf -a src/ --theme solarized-light  # any Pygments theme for the code
 code2pdf --list-themes                    # every theme name
 ```
 
-See which files `-a` would include, without converting:
-```bash
-code2pdf -a . --list-files
-```
+#### Choosing files
 
 By default `-a` includes source files of common languages (C/C++/Objective-C, Swift, Go, Rust,
 Java/Kotlin, C#, Python, Ruby, JavaScript/TypeScript, shell, SQL, …), Markdown, YAML and TOML,
-plus `README`, `LICENSE`, `Makefile` and files without an extension such as `Dockerfile`. It skips
-hidden folders, `node_modules`, `build`, `dist`, `out`, `target`, `DerivedData`, `Pods`, `vendor`,
-`__pycache__`, `venv` and `env*`. Adjust with `--include-types`, `--ignore-types`,
-`--ignore-folders` and `--ignore-files`.
+plus `README`, `LICENSE`, `Makefile` and files without an extension such as `Dockerfile` (not
+JSON, `.txt` or other data files; add them with `--include`). It skips
+hidden files and folders, binary files, `node_modules`, `build`, `dist`, `out`, `target`,
+`DerivedData`, `Pods`, `vendor`, `__pycache__`, `venv` and `env*`.
+
+```bash
+code2pdf -a . --list-files                         # see what would be included, in order, without converting
+code2pdf -a . --exclude tests --exclude '*.lock'   # leave out files and folders
+code2pdf -a . --exclude src/legacy                 # only this folder, not lib/legacy
+code2pdf -a . --include '*.json' --include .github # add what the defaults leave out
+code2pdf -a . --include-types swift,m              # only these extensions
+git ls-files src | code2pdf --files-from -         # exactly these files, in this order
+code2pdf -a src -o ~/Desktop/src.pdf               # choose where the PDF goes
+```
+
+| Option | Effect |
+|--------|--------|
+| `--exclude GLOB` | Leave out matching files and folders. Wins over everything else. |
+| `--include GLOB` | Also include matching files of any type, even hidden ones or ones in skipped folders. A folder (`--include config`) brings every file in it. |
+| `--files-from FILE` | Convert exactly the files listed in `FILE` (`-` for stdin), one per line, in that order: relative to the directory (default `.`) or absolute. Only `--exclude`/`--ignore-*` and the binary check apply. |
+| `--include-types LIST` | Only these extensions (replaces the default list). |
+| `--ignore-types LIST` | Skip these extensions. |
+| `--ignore-folders LIST` | Skip folders with these names, at any depth. |
+| `--ignore-files LIST` | Skip files with these names, at any depth. |
+| `-o`, `--output PDF` | Write the PDF here (a folder: the default name inside it; missing folders are created). Works with `-s` too. |
+
+Every option can be repeated (`--exclude a --exclude b`; lists add up). Globs: `*` and `?` match
+within a name and don't match a leading dot, `**` matches any number of folders. A glob without
+`/` matches names at any depth (`*_test.go`); with `/` it matches the path from the directory
+(`src/legacy`, `docs/**/*.md`). A glob that matches a folder covers everything in it. Skipped
+folders are entered only when a glob names them literally (`.github`, `node_modules/foo`), so
+`--include '*'` never pulls in `node_modules` or `.git`. A glob that matches nothing prints a
+warning, and unknown options are errors.
+
+#### Using code2pdf from a coding agent
+
+You can ask a coding agent (Claude Code, Codex, …) for a PDF in plain words, e.g. "print the
+backend without tests and generated code, but with the SQL migrations". Tell it to:
+
+1. read `code2pdf --help`,
+2. turn the request into `--include`/`--exclude` (or pick files itself and pass them with
+   `--files-from -`),
+3. run with `--list-files` first and show you the list, then convert.
+
+For example:
+```bash
+code2pdf -a backend --exclude tests --exclude '*_pb2.py' --include 'migrations/*.sql' --list-files
+code2pdf -a backend --exclude tests --exclude '*_pb2.py' --include 'migrations/*.sql' -o backend.pdf
+```
 
 Show the version, how it was installed, and the libraries it uses (handy when reporting a problem):
 ```bash
@@ -146,7 +188,7 @@ code2pdf --help
 ```
 
 Output: `-s` writes `<name>.pdf` to the current directory; `-a` writes `merged.pdf`
-into the directory you converted. The whole directory is rendered in one pass:
+into the directory you converted (`-o` chooses another place). The whole directory is rendered in one pass:
 
 - **Contents page**: files grouped by folder with page numbers (clickable), the number of
   files and lines, and when it was printed, e.g. `Printed 2026-10-09 from commit 7afaa74 (main)`
