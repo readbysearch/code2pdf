@@ -140,3 +140,16 @@ def test_default_selection_covers_common_languages_and_skips_build_output(linked
     result = run([str(linked_bin / "code2pdf"), "-a", str(project), "--list-files"], temp_dir)
     assert result.returncode == 0, result.stdout + result.stderr
     assert sorted(result.stdout.split()) == sorted(sources)
+
+
+@pytest.mark.skipif(not repo_venv_has_deps(), reason="repo .venv lacks pygments/weasyprint")
+def test_jobs_option_renders_in_parts(linked_bin, temp_dir):
+    project = temp_dir / "big"
+    project.mkdir()
+    for i in range(4):
+        (project / f"m{i}.py").write_text("x = 1\n" * 80)
+    result = run([str(linked_bin / "code2pdf"), "-a", str(project), "-j", "2"], temp_dir,
+                 {"CODE2PDF_PART_PAGES": "2"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "2 at a time" in result.stderr
+    assert (project / "merged.pdf").exists()

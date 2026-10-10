@@ -138,19 +138,38 @@ def font_face_css():
         for family, filename, weight, style in FONT_FACES)
 
 
-def page_css(theme, header_right):
+PAGE_SIZE = "size: A4; margin: 20mm 17mm 18mm 17mm;"
+
+
+def chrome_css(theme, header_right):
+    """Page header (file path, project and date) and footer (page / pages)."""
     p = theme.palette
-    code_block = (f".highlight {{ background: {theme.code_background}; padding: 3mm 3mm 3mm 1mm; }}"
-                  if theme.code_background else ".highlight, .highlight pre { background: none; }")
     return f"""
 @page {{
-    size: A4;
-    margin: 20mm 17mm 18mm 17mm;
+    {PAGE_SIZE}
     @top-left {{ content: string(path); font: 7.5pt "c2p Text", {CJK_FALLBACK}; color: {p.graphite}; }}
     @top-right {{ content: {css_string(header_right)}; font: 7.5pt "c2p Text", {CJK_FALLBACK}; color: {p.graphite}; }}
     @bottom-right {{ content: counter(page) " / " counter(pages); font: 7.5pt "c2p Text", {CJK_FALLBACK}; color: {p.graphite}; }}
 }}
 @page :first {{ @top-left {{ content: none; }} @top-right {{ content: none; }} }}
+"""
+
+
+def overlay_css(theme, header_right):
+    """Headers and footers only, one empty <div class="page" data-path=...> per page; stamped onto
+    documents rendered in parts (see parts.py)."""
+    return chrome_css(theme, header_right) + """
+div.page { string-set: path attr(data-path); break-after: page; height: 1px; }
+div.page:last-child { break-after: auto; }
+"""
+
+
+def page_css(theme, header_right, chrome=True):
+    p = theme.palette
+    code_block = (f".highlight {{ background: {theme.code_background}; padding: 3mm 3mm 3mm 1mm; }}"
+                  if theme.code_background else ".highlight, .highlight pre { background: none; }")
+    pages = chrome_css(theme, header_right) if chrome else f"@page {{ {PAGE_SIZE} }}\n"
+    return pages + f"""
 body {{ margin: 0; color: {p.ink}; font: 8.5pt/1.45 "c2p Code", {CJK_FALLBACK}; }}
 
 /* Contents */
@@ -163,6 +182,7 @@ nav.toc ol {{ list-style: none; margin: 0; padding: 0; }}
 nav.toc li {{ font-size: 9.5pt; line-height: 1.75; padding-left: 4mm; }}
 nav.toc a {{ color: {p.ink}; text-decoration: none; }}
 nav.toc a::after {{ content: leader(" . ") target-counter(attr(href), page); color: {p.faint}; }}
+nav.toc a[data-page]::after {{ content: leader(" . ") attr(data-page); }}
 
 /* File title: the one prominent element */
 section.file {{ break-before: page; }}

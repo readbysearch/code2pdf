@@ -194,26 +194,24 @@ def count_lines(source):
     return source.count("\n") + (1 if source and not source.endswith("\n") else 0)
 
 
-def build_html(entries, theme, project, printed_moment, info, contents=True, sources=None):
-    """entries: [(display path, absolute path)]; info: SourceInfo keyed by display path;
-    sources: optional {absolute path: text} already read by the caller."""
-    printed = printed_moment.date().isoformat()
+def build_sections(entries, theme, info, sources=None, first_index=0):
+    """One <section> per file. Returns (sections, groups, total_lines, style_defs), where groups maps
+    folder -> [(index, file name)] for the contents page; indexes start at FIRST_INDEX."""
     from pygments import highlight
     from pygments.formatters import HtmlFormatter
     from code_to_pdf import lexer_for, read_source
-    import theme as themes
 
     formatter = HtmlFormatter(style=theme.style, linespans="L", cssclass="highlight")
     groups = OrderedDict()
     sections = []
     total_lines = 0
-    for i, (rel, path) in enumerate(entries):
+    for i, (rel, path) in enumerate(entries, first_index):
         source = sources[path] if sources and path in sources else read_source(path)
         lexer = lexer_for(rel, source)
         lines = count_lines(source)
         total_lines += lines
         folder, name = os.path.split(rel)
-        groups.setdefault(folder, []).append(f'<li><a href="#f{i}">{html.escape(name)}</a></li>')
+        groups.setdefault(folder, []).append((i, name))
         code = highlight(source, lexer, formatter).replace('id="L-', f'id="f{i}-L-')
         folder_html = f'<div class="dir">{html.escape(folder)}/</div>' if folder else ""
         language = "Plain text" if lexer.name == "Text only" else lexer.name
@@ -224,21 +222,29 @@ def build_html(entries, theme, project, printed_moment, info, contents=True, sou
             f'<section class="file"><header>{folder_html}'
             f'<h1 id="f{i}" data-path="{html.escape(rel)}">{html.escape(name)}</h1>'
             f'<div class="meta">{html.escape(details)}</div></header>{code}</section>')
+    return sections, groups, total_lines, formatter.get_style_defs(".highlight")
 
-    title = project or (entries[0][0] if entries else "code2pdf")
-    nav = ""
-    if contents:
-        toc = "".join(
-            f'<h2>{html.escape((folder or project) + "/")}</h2><ol>{"".join(items)}</ol>'
-            for folder, items in groups.items())
-        printed_line = f"Printed {printed}" + (f" {info.summary}" if info.summary else "")
-        nav = (f'<nav class="toc"><h1>{html.escape(project)}</h1>'
-               f'<p class="summary">{len(entries):,} file{"s" if len(entries) != 1 else ""}, '
-               f'{total_lines:,} line{"s" if total_lines != 1 else ""}</p>'
-               f'<p class="summary">{html.escape(printed_line)}</p>{toc}</nav>')
 
-    header_right = f"{project}, {printed}" if project else printed
-    style_defs = formatter.get_style_defs(".highlight")
+def build_contents(project, file_count, total_lines, printed, info, groups, page_numbers=None):
+    """The contents page. Without PAGE_NUMBERS, entries link to #f<i> and WeasyPrint fills in the
+    numbers; with {index: page}, the numbers are written in and links use the placeholder
+    code2pdf:f<i>, which parts.py rewires once the parts are joined."""
+    def entry(i, name):
+        if page_numbers is None:
+            return f'<li><a href="#f{i}">{html.escape(name)}</a></li>'
+        return f'<li><a href="code2pdf:f{i}" data-page="{page_numbers[i]}">{html.escape(name)}</a></li>'
+
+    toc = "".join(
+        f'<h2>{html.escape((folder or project) + "/")}</h2><ol>{"".join(entry(i, n) for i, n in items)}</ol>'
+        for folder, items in groups.items())
+    printed_line = f"Printed {printed}" + (f" {info.summary}" if info.summary else "")
+    return (f'<nav class="toc"><h1>{html.escape(project)}</h1>'
+            f'<p class="summary">{file_count:,} file{"s" if file_count != 1 else ""}, '
+            f'{total_lines:,} line{"s" if total_lines != 1 else ""}</p>'
+            f'<p class="summary">{html.escape(printed_line)}</p>{toc}</nav>')
+
+
+def wrap_document(title, printed_moment, css, body):
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -246,13 +252,31 @@ def build_html(entries, theme, project, printed_moment, info, contents=True, sou
 <title>{html.escape(title)}</title>
 <meta name="generator" content="code2pdf">
 <meta name="dcterms.created" content="{printed_moment.isoformat(timespec='seconds')}">
-<style>{themes.font_face_css()}{style_defs}{themes.page_css(theme, header_right)}</style>
+<style>{css}</style>
 </head>
 <body>
-{nav}{''.join(sections)}
+{body}
 </body>
 </html>
 """
+
+
+def header_right(project, printed):
+    return f"{project}, {printed}" if project else printed
+
+
+def build_html(entries, theme, project, printed_moment, info, contents=True, sources=None):
+    """The whole document in one HTML string (single-pass rendering).
+    entries: [(display path, absolute path)]; info: SourceInfo keyed by display path;
+    sources: optional {absolute path: text} already read by the caller."""
+    import theme as themes
+
+    printed = printed_moment.date().isoformat()
+    sections, groups, total_lines, style_defs = build_sections(entries, theme, info, sources)
+    nav = build_contents(project, len(entries), total_lines, printed, info, groups) if contents else ""
+    title = project or (entries[0][0] if entries else "code2pdf")
+    css = themes.font_face_css() + style_defs + themes.page_css(theme, header_right(project, printed))
+    return wrap_document(title, printed_moment, css, nav + "".join(sections))
 
 
 class _WeasyPrintProgress:
@@ -289,7 +313,7 @@ class _WeasyPrintProgress:
 
 
 def render_document(entries, output, theme_name="paper", project=None, contents=True, root=None,
-                    quiet=True):
+                    quiet=True, jobs=None):
     """Render [(display path, absolute path)] into OUTPUT. Raises ValueError for an unknown theme.
     Unless QUIET, reports progress on stderr."""
     from weasyprint import HTML
@@ -310,8 +334,27 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
     else:
         info = source_info(root, [rel for rel, _ in entries])
 
-    document = build_html(entries, theme, project, printed_at(), info, contents=contents, sources=sources)
+    moment = printed_at()
     out_dir = os.path.dirname(os.path.abspath(output))
+    estimates = [progress_report.estimate_pages([sources[path]]) for _, path in entries]
+    import parts as parts_mode
+    if contents and root is not None and sum(estimates) > 2 * parts_mode.part_pages():
+        fd, tmp = tempfile.mkstemp(prefix=".code2pdf-", suffix=".pdf", dir=out_dir)
+        os.close(fd)
+        try:
+            pages = parts_mode.render_in_parts(entries, tmp, theme, project, moment, info, sources, estimates,
+                                               progress, root, jobs=jobs)
+            os.replace(tmp, output)
+        except BaseException:
+            progress.abort()
+            raise
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        progress.done(pages=pages, output=output)
+        return
+
+    document = build_html(entries, theme, project, moment, info, contents=contents, sources=sources)
     fd, tmp = tempfile.mkstemp(prefix=".code2pdf-", suffix=".pdf", dir=out_dir)
     os.close(fd)
     try:
@@ -338,6 +381,7 @@ def parse_args(argv):
     parser.add_argument("--list-themes", action="store_true")
     parser.add_argument("--theme", default=os.environ.get("CODE2PDF_THEME", "paper"))
     parser.add_argument("--quiet", action="store_true", default=bool(os.environ.get("CODE2PDF_QUIET")))
+    parser.add_argument("--jobs", type=int, default=None)
     return parser.parse_args(argv)
 
 
@@ -365,7 +409,7 @@ def main(argv=None):
     entries = [(rel, os.path.join(root, rel)) for rel in files]
     try:
         render_document(entries, output, theme_name=args.theme, project=os.path.basename(root),
-                        contents=True, root=root, quiet=args.quiet)
+                        contents=True, root=root, quiet=args.quiet, jobs=args.jobs)
     except ValueError as e:
         print(f"Error: {e}; run `code2pdf --list-themes` to see the names", file=sys.stderr)
         return 1
