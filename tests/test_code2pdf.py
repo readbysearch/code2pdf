@@ -25,7 +25,8 @@ class TestCode2pdf:
         )
         
         assert returncode != 0
-        assert "help" in stdout.lower() or "usage" in stdout.lower()
+        assert "unknown option --invalid-option" in stderr
+        assert "--help" in stderr
     
     def test_no_arguments(self, code2pdf_path):
         """Test behavior when no arguments provided."""
@@ -57,3 +58,26 @@ class TestCode2pdf:
         returncode, stdout, stderr = run_command([str(code2pdf_path), "--dev", "--help"])
         assert returncode == 0
         assert "Usage: code2pdf" in stdout
+
+    def test_unknown_option_is_an_error_not_a_path(self, code2pdf_path, temp_dir):
+        returncode, stdout, stderr = run_command([str(code2pdf_path), "-a", str(temp_dir), "--exlude", "x"])
+        assert returncode != 0
+        assert "unknown option --exlude" in stderr
+
+    def test_option_without_value(self, code2pdf_path, temp_dir):
+        returncode, _, stderr = run_command([str(code2pdf_path), "-a", str(temp_dir), "--exclude"])
+        assert returncode != 0
+        assert "--exclude needs a value" in stderr
+
+    def test_selection_options_need_all_mode(self, code2pdf_path, temp_dir):
+        (temp_dir / "a.py").write_text("x = 1\n")
+        returncode, _, stderr = run_command([str(code2pdf_path), "-s", str(temp_dir / "a.py"),
+                                             "--exclude", "x"])
+        assert returncode != 0
+        assert "work with -a DIR" in stderr
+
+    def test_extra_paths_are_an_error(self, code2pdf_path, temp_dir):
+        returncode, _, stderr = run_command([str(code2pdf_path), "-a", str(temp_dir), str(temp_dir)])
+        assert returncode != 0
+        assert "takes one path" in stderr
+

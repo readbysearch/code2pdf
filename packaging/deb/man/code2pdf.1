@@ -36,6 +36,24 @@ Convert all selected files in
 to
 .IR DIR/merged.pdf .
 .TP
+.BI "\-o, \-\-output " PDF
+Write the PDF here instead (a directory: the default name inside it).
+.TP
+.BI \-\-exclude " GLOB"
+Leave out matching files and folders; wins over every other rule.
+.TP
+.BI \-\-include " GLOB"
+Also include matching files: other types, hidden files, files in skipped folders
+(a skipped folder must be named literally, e.g.
+.BR .github ).
+.TP
+.BI \-\-files\-from " FILE"
+Convert exactly the files listed in
+.I FILE
+(\- for standard input), one per line, in that order; relative to
+.I DIR
+(default \.) or absolute.
+.TP
 .BI \-\-include\-types " LIST"
 Only include these comma-separated extensions.
 .TP
@@ -51,7 +69,18 @@ Skip these file names.
 .B \-\-list\-files
 With
 .BR \-a :
-print the files that would be included, without converting.
+print the files that would be included, in order, without converting.
+.PP
+Every option can be repeated. In globs,
+.B *
+and
+.B ?
+match within a name (not a leading dot) and
+.B **
+matches any number of folders; a glob without / matches names at any depth, one with /
+matches the path from
+.IR DIR .
+A glob matching a folder covers everything in it; one matching nothing prints a warning.
 .TP
 .BI \-\-theme " NAME"
 .B paper
@@ -90,6 +119,8 @@ Fixed printing date, for reproducible output.
 .nf
 code2pdf \-a .
 code2pdf \-a src \-\-include\-types py,ts \-\-theme mono
+code2pdf \-a . \-\-exclude tests \-\-include .github \-\-list\-files
+git ls\-files src | code2pdf \-\-files\-from \- \-o src.pdf
 code2pdf \-s main.go
 .fi
 .SH SEE ALSO

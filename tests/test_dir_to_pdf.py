@@ -95,6 +95,103 @@ class TestFiltering:
         assert files.count("a.py") == 1
 
 
+def listed_in_order(root, *extra, stdin=None):
+    cmd = [PYTHON, str(SCRIPT), str(root), str(Path(root) / "merged.pdf"), BLACKLIST, PATTERN,
+           EXTENSIONS, NAMES, "true", "", "", "", "", "--list-files", *extra]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, input=stdin)
+    return result.stdout.split(), result
+
+
+class TestGlobs:
+    """--include adds to the default rules, --exclude wins over everything."""
+
+    def test_exclude_by_path_keeps_same_name_elsewhere(self, tree):
+        (tree / "lib" / "deep").mkdir(parents=True)
+        (tree / "lib" / "deep" / "d.ts").write_text("x\n")
+        files, _ = listed_in_order(tree, "--exclude", "sub/deep")
+        assert "sub/deep/d.ts" not in files and "lib/deep/d.ts" in files
+
+    def test_exclude_glob_at_any_depth(self, tree):
+        (tree / "sub" / "c_test.js").write_text("x\n")
+        files, _ = listed_in_order(tree, "--exclude", "*_test.js", "--exclude", "*.md")
+        assert "sub/c_test.js" not in files and "b.md" not in files and "sub/c.js" in files
+
+    def test_include_adds_to_the_defaults(self, tree):
+        files, _ = listed_in_order(tree, "--include", "*.json", "--include", "notes.txt")
+        assert {"package-lock.json", "notes.txt", "a.py", "sub/c.js"} <= set(files)
+
+    def test_include_names_hidden_and_skipped_folders(self, tree):
+        files, _ = listed_in_order(tree, "--include", ".hidden", "--include", "node_modules/*.js",
+                                   "--include", ".dotfile")
+        assert {".hidden/z.py", "node_modules/x.js", ".dotfile"} <= set(files)
+        assert "dist/f.js" not in files
+
+    def test_wildcards_never_reach_into_skipped_folders_or_dotfiles(self, tree):
+        files, _ = listed_in_order(tree, "--include", "*", "--include", "**/*.js")
+        assert "notes.txt" in files  # * does include other types
+        for skipped in ("node_modules/x.js", "dist/f.js", "envfoo/y.py", ".hidden/z.py", ".dotfile"):
+            assert skipped not in files
+
+    def test_exclude_wins_over_include(self, tree):
+        files, _ = listed_in_order(tree, "--include", "sub", "--exclude", "sub/deep/*.ts")
+        assert "sub/c.js" in files and "sub/deep/d.ts" not in files
+
+    def test_include_of_a_folder_covers_every_file_in_it(self, tree):
+        (tree / "sub" / "data.csv").write_text("a,b\n")
+        files, _ = listed_in_order(tree, "--include", "sub")
+        assert "sub/data.csv" in files and "sub/deep/e.go" in files
+
+    def test_absolute_and_dot_slash_patterns(self, tree):
+        files, _ = listed_in_order(tree, "--exclude", str(tree / "sub"), "--exclude", "./tests/")
+        assert not any(f.startswith(("sub/", "tests/")) for f in files) and "a.py" in files
+
+    def test_pattern_that_matches_nothing_is_reported(self, tree):
+        files, result = listed_in_order(tree, "--exclude", "src/legacy", "--include", "*.nope")
+        assert result.returncode == 0
+        assert "--exclude 'src/legacy' matched nothing" in result.stderr
+        assert "--include '*.nope' matched nothing" in result.stderr
+
+    def test_binary_files_are_skipped(self, tree):
+        (tree / "sub" / "blob.js").write_bytes(b"\x00\x01binary")
+        files, result = listed_in_order(tree, "--include", "sub")
+        assert "sub/blob.js" not in files
+        assert "Skipping binary file: sub/blob.js" in result.stderr
+
+
+class TestFilesFrom:
+
+    def test_exact_list_in_given_order(self, tree):
+        files, result = listed_in_order(tree, "--files-from", "-",
+                                        stdin="tests/t.py\nnotes.txt\n\na.py\ntests/t.py\n")
+        assert result.returncode == 0, result.stderr
+        assert files == ["tests/t.py", "notes.txt", "a.py"]  # no default filter, duplicates dropped
+
+    def test_absolute_paths_and_exclusions(self, tree, temp_dir):
+        listing = temp_dir / "list.txt"
+        listing.write_text(f"{tree / 'a.py'}\nb.md\nsub/c.js\n")
+        files, result = listed_in_order(tree, "--files-from", str(listing), "--exclude", "*.md")
+        assert files == ["a.py", "sub/c.js"], result.stderr
+
+    def test_missing_or_outside_files_are_errors(self, tree, temp_dir):
+        (temp_dir / "outside.py").write_text("x\n")
+        files, result = listed_in_order(tree, "--files-from", "-",
+                                        stdin=f"a.py\nnope.py\n{temp_dir / 'outside.py'}\nsub\n")
+        assert result.returncode != 0
+        assert "not a file: nope.py" in result.stderr
+        assert "outside" in result.stderr and "not a file: sub" in result.stderr
+
+    def test_include_is_rejected(self, tree):
+        _, result = listed_in_order(tree, "--files-from", "-", "--include", "*.txt", stdin="a.py\n")
+        assert result.returncode != 0 and "--include has no effect" in result.stderr
+
+
+def test_contents_groups_follow_page_order():
+    sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+    import dir_to_pdf
+    groups = dir_to_pdf.group_by_folder(["a.py", "sub/c.js", "sub/d.js", "z.py", "sub/e.js"])
+    assert groups == [("", [(0, "a.py")]), ("sub", [(1, "c.js"), (2, "d.js")]),
+                      ("", [(3, "z.py")]), ("sub", [(4, "e.js")])]
+
 @needs_render
 class TestRendering:
 
@@ -136,6 +233,22 @@ class TestRendering:
         result = run_script(tree, env=env)
         assert result.returncode == 0, result.stderr
         assert (tree / "merged.pdf").read_bytes().startswith(b"%PDF-")
+
+    @needs_pdftotext
+    def test_files_from_order_and_output_option(self, tree, temp_dir):
+        out = temp_dir / "out" / "picked.pdf"
+        cmd = [PYTHON, str(SCRIPT), str(tree), "", BLACKLIST, PATTERN, EXTENSIONS, NAMES, "true",
+               "", "", "", "", "--files-from", "-", "--output", str(out), "--quiet"]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120,
+                                input="sub/c.js\na.py\nsub/deep/d.ts\n")
+        assert result.returncode == 0, result.stderr
+        text = subprocess.run(["pdftotext", "-layout", str(out), "-"], capture_output=True, text=True).stdout
+        body = text.split("\f")[1:]
+        assert [p for p in ("content of sub/c.js", "content of a.py", "content of sub/deep/d.ts")
+                if any(p in page for page in body)] == ["content of sub/c.js", "content of a.py",
+                                                        "content of sub/deep/d.ts"]
+        assert body[0].count("content of") == 1 and "content of sub/c.js" in body[0]
+        assert not (tree / "merged.pdf").exists()
 
     def test_no_matching_files_is_an_error(self, tree):
         result = run_script(tree, include_types="nothing")
