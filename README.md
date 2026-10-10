@@ -60,7 +60,7 @@ Re-run it to upgrade; `--ref v3.3` installs a specific release.
 git clone https://github.com/readbysearch/code2pdf.git
 cd code2pdf
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt   # pygments, weasyprint
+.venv/bin/pip install -r requirements.txt   # pygments, weasyprint, pypdf
 # WeasyPrint also needs Pango (brew install pango / apt install libpango-1.0-0 libpangoft2-1.0-0)
 
 ./bin/code2pdf -s myfile.py   # uses ./scripts and ./.venv automatically
@@ -136,6 +136,12 @@ Done: 873 pages in 0:59 → /path/to/project/merged.pdf
 
 The page count is estimated up front from line counts and line lengths. In a terminal the
 status updates in place; in logs or pipes a line is printed every 10%.
+
+**Big directories** (more than ~200 pages) are rendered in parts of ~100 pages, each in its own
+process, then joined, so memory stays bounded (about 1.3 GB per part) and several CPU cores are
+used. `-j N` / `--jobs N` sets how many parts render at once (default 2; 1 on machines with
+less than 8 GB). A 563-page project takes ~30 s with 2 parts at a time (3.1 GB peak), ~23 s
+with 3 (3.7 GB), and ~52 s with 1 (1.9 GB); without parts it took 54 s and 4.2 GB.
 
 ## Fonts
 

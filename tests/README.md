@@ -84,6 +84,10 @@ pytest --timeout=30
   - One updating line in a terminal, a line per 10% in logs, `--quiet`
   - Elapsed time keeps ticking while WeasyPrint prepares and writes; time left includes writing
 
+- **test_parts.py**: Big documents rendered in parts (forced small with `CODE2PDF_PART_PAGES`)
+  - Joined output has the same text on every page as a single pass
+  - Contents links and bookmarks point at each file; headers/footers on every page; metadata
+
 - **test_print_all_tmp.py**: Directory conversion safety
   - Leaves unrelated files in `/tmp` alone; the PDF contains only its own pages
   - Leaves no work files behind
