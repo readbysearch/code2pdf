@@ -46,7 +46,7 @@ def run_print_all(project_root: Path, target: Path):
         '["node_modules", ".git", "dist", "out"]', "env*",
         '["py", "md"]', '["README"]', "true", "", "", "", "",
     ]
-    proc = subprocess.run(cmd, env=python_env(), capture_output=True, text=True, timeout=120)
+    proc = subprocess.run(cmd, env=python_env(), capture_output=True, text=True, timeout=60)
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -91,3 +91,9 @@ class TestPrintAllTmpIsolation:
         leftovers = [p for p in set(Path("/tmp").iterdir()) - before
                      if p.name.startswith("code2pdf") or p.suffix == ".pdf" or p.name == "table_of_contents"]
         assert leftovers == []
+
+    def test_nonexistent_directory_fails_fast(self, project_root, temp_dir):
+        """A bad path used to leave ROOT_DIR empty and crawl the whole filesystem from /."""
+        returncode, _, stderr = run_print_all(project_root, temp_dir / "does-not-exist")
+        assert returncode != 0
+        assert "not found" in stderr.lower()

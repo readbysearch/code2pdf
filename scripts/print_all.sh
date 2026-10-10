@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # If no argument is provided, use current directory as default
 # Convert ROOT_DIR to absolute path immediately when setting it
-ROOT_DIR=$(cd "${1:-.}" && pwd)
+ROOT_DIR=$(cd "${1:-.}" 2>/dev/null && pwd) || { echo "Error: directory not found: ${1:-.}" >&2; exit 1; }
 
 # Get vimrc path
 VIMRC_PATH=$2
