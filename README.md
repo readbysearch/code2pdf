@@ -8,8 +8,10 @@ Convert source code files to PDF or combine them into a single text file, with t
 - Convert single source code files to PDF
 - Convert entire directories of code files to PDF with a table of contents
 - Preserve syntax highlighting and formatting
-- Support for 500+ programming languages (via Pygments)
+- Support for 500+ programming languages (via Pygments), detected from the file name or a `#!` line
 - **Full UTF-8 and CJK support** (Chinese, Japanese, Korean)
+- Designed for print: bundled IBM Plex fonts, a colour theme that stays readable in black and white, a black & white theme, or any Pygments theme
+- Dates that identify the printout: printing date and git commit on the contents page, last change per file
 - Available as a command-line tool
 
 ### code2txt
@@ -86,16 +88,39 @@ Convert all files in a directory:
 code2pdf -a src/
 ```
 
+Choose a theme:
+```bash
+code2pdf -a src/                          # paper (default): colour, designed for print
+code2pdf -a src/ --theme mono             # black & white, for laser printers
+code2pdf -a src/ --theme solarized-light  # any Pygments theme for the code
+code2pdf --list-themes                    # every theme name
+```
+
 Show help:
 ```bash
 code2pdf --help
 ```
 
 Output: `-s` writes `<name>.pdf` to the current directory; `-a` writes `merged.pdf`
-into the directory you converted: a clickable table of contents with page numbers,
-then every file, with PDF bookmarks per file. The whole directory is rendered in one pass.
+into the directory you converted. The whole directory is rendered in one pass:
 
-## CJK Font Support
+- **Contents page**: files grouped by folder with page numbers (clickable), the number of
+  files and lines, and when it was printed, e.g. `Printed 2026-10-09 from commit 7afaa74 (main)`
+  (`with uncommitted changes` if any file has local edits).
+- **Each file** starts on a new page with its folder, name, and details such as
+  `Python, 241 lines, last changed 2026-10-08` (from git; `uncommitted changes` for local edits;
+  `modified <date>` outside a git repository). Each file is also a PDF bookmark.
+- **Every page** shows the file path, the project name with the printing date, and the page number.
+
+Set `SOURCE_DATE_EPOCH` to fix the printing date for reproducible output.
+
+## Fonts
+
+code2pdf bundles [IBM Plex](https://github.com/IBM/plex) Mono and Sans (in `fonts/`, SIL Open Font
+License 1.1), so PDFs look the same on every machine. Plex has no Chinese, Japanese or Korean
+glyphs; those come from the system fonts.
+
+### CJK Font Support
 
 Chinese, Japanese and Korean text works out of the box on **macOS** — the system fonts
 (PingFang, Hiragino, Apple SD Gothic/Nanum) are used automatically.
@@ -196,3 +221,6 @@ This project is licensed under the GNU Affero General Public License v3.0 (AGPL-
 
 - For commercial use, please [open a GitHub issue](https://github.com/readbysearch/code2pdf/issues) to discuss licensing options
 - For non-commercial use, you must comply with AGPL-3.0 terms
+
+The bundled IBM Plex fonts in `fonts/` are licensed separately under the SIL Open Font License 1.1
+(`fonts/LICENSE-IBM-Plex.txt`).
