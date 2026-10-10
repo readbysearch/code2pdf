@@ -46,7 +46,7 @@ curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.s
 ### Via Homebrew (macOS and Linux)
 
 ```bash
-brew install readbysearch/code2pdf/code2pdf
+brew install readbysearch/tap/code2pdf
 ```
 
 Installs both `code2pdf` and `code2txt` with everything they need (Python, Pygments,
