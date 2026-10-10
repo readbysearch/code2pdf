@@ -130,8 +130,9 @@ def _default(r, *extra):
 # The agent has to notice and wait (a longer timeout, or running it in the background).
 SCALE_CASES = [
     dict(id="scale-alamofire", project="alamofire", scale=True,
-         request="Print the whole Alamofire repository the way code2pdf normally selects files, "
-                 "generated docs included. Yes, it will be big.",
+         request="Print the whole Alamofire repository exactly as code2pdf selects files by "
+                 "default, nothing added or removed (that includes the generated HTML docs). "
+                 "Yes, it will be big.",
          expected=lambda r: _default(r),
          why_hard="~7,700 pages, ~6 minutes to render: three times the default command timeout.",
          source="production: whole-repository prints (ClaudeTerminal took 54 s for 563 pages)",
