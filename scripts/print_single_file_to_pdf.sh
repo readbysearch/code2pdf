@@ -2,19 +2,19 @@
 
 # Check if a file path was provided
 if [ -z "$1" ]; then
-  echo "No file path provided."
+  echo "No file path provided." >&2
   exit 1
 fi
 
 # Check if the project folder path was provided
 if [ -z "$2" ]; then
-  echo "No project folder path provided."
+  echo "No project folder path provided." >&2
   exit 1
 fi
 
 # Check if the file exists
 if [ ! -f "$1" ]; then
-  echo "File not found."
+  echo "File not found." >&2
   exit 1
 fi
 
@@ -41,6 +41,6 @@ python3 "$script_dir/code_to_pdf.py" "$file_name" "$vs_project_folder_name/$pdf_
 if [ $? -eq 0 ]; then
     echo "PDF created at $vs_project_folder_name/$pdf_name.pdf"
 else
-    echo "Error: Failed to create PDF"
+    echo "Error: Failed to create PDF" >&2
     exit 1
 fi

@@ -1,0 +1,96 @@
+"""Launchers must find their scripts relative to themselves, not via Homebrew."""
+
+import os
+import shutil
+import subprocess
+from pathlib import Path
+import pytest
+
+
+PROJECT_ROOT = Path(__file__).parent.parent
+REPO_VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python3"
+
+
+def repo_venv_has_deps() -> bool:
+    if not REPO_VENV_PYTHON.exists():
+        return False
+    return subprocess.run([str(REPO_VENV_PYTHON), "-c", "import pygments, weasyprint"],
+                          capture_output=True).returncode == 0
+
+
+def isolated_path(tmp: Path) -> str:
+    """A PATH with gs and jq but no brew and no python carrying pygments/weasyprint."""
+    tools = tmp / "tools"
+    tools.mkdir()
+    for tool in ("gs", "jq"):
+        found = shutil.which(tool)
+        if found:
+            (tools / tool).symlink_to(found)
+    return f"{tools}:/usr/bin:/bin"
+
+
+def run(cmd, cwd, env_extra=None):
+    env = {"HOME": os.environ["HOME"], "PATH": isolated_path(cwd)}
+    env.update(env_extra or {})
+    return subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=60)
+
+
+@pytest.fixture
+def linked_bin(temp_dir):
+    """bin/ dir of symlinks to the repo launchers, as install.sh and `ln -s` create."""
+    link_dir = temp_dir / "linkbin"
+    link_dir.mkdir()
+    for name in ("code2pdf", "code2txt"):
+        (link_dir / name).symlink_to(PROJECT_ROOT / "bin" / name)
+    return link_dir
+
+
+def test_code2pdf_help_needs_no_dependencies(linked_bin, temp_dir):
+    result = run([str(linked_bin / "code2pdf"), "--help"], temp_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Usage: code2pdf" in result.stdout
+
+
+def test_code2txt_works_through_symlink(linked_bin, temp_dir):
+    project = temp_dir / "proj"
+    project.mkdir()
+    (project / "a.py").write_text("print('hi')\n")
+    result = run([str(linked_bin / "code2txt"), "-o", "out.md", str(project)], temp_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "print('hi')" in (temp_dir / "out.md").read_text()
+
+
+@pytest.mark.skipif(not repo_venv_has_deps(), reason="repo .venv lacks pygments/weasyprint")
+def test_code2pdf_symlink_uses_repo_scripts_and_venv(linked_bin, temp_dir):
+    (temp_dir / "hello.py").write_text("# 你好\nprint('hi')\n")
+    result = run([str(linked_bin / "code2pdf"), "-s", "hello.py"], temp_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (temp_dir / "hello.pdf").read_bytes().startswith(b"%PDF-")
+
+
+def test_code2pdf_home_override(temp_dir):
+    """CODE2PDF_HOME points the launcher at another install (used by the Homebrew formula)."""
+    home = temp_dir / "fakehome"
+    (home / "scripts").mkdir(parents=True)
+    (home / "config").mkdir()
+    marker = home / "scripts" / "print_single_file_to_pdf.sh"
+    marker.write_text('#!/bin/bash\necho "FAKE HOME USED for $1"\n')
+    marker.chmod(0o755)
+    (home / "scripts" / "print_all.sh").write_text("#!/bin/bash\n")
+    venv_bin = home / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    fake_python = venv_bin / "python3"
+    fake_python.write_text("#!/bin/sh\nexit 0\n")  # satisfies the import checks
+    fake_python.chmod(0o755)
+    (temp_dir / "x.py").write_text("x = 1\n")
+    result = run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-s", "x.py"], temp_dir,
+                 {"CODE2PDF_HOME": str(home)})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "FAKE HOME USED for x.py" in result.stdout
+
+
+def test_code2pdf_reports_missing_scripts(temp_dir):
+    result = run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-s", "x.py"], temp_dir,
+                 {"CODE2PDF_HOME": str(temp_dir / "nowhere")})
+    assert result.returncode != 0
+    assert "scripts" in (result.stdout + result.stderr).lower()

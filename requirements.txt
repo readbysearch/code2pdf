@@ -1,0 +1,3 @@
+# Runtime dependencies for code2pdf (code2txt needs none)
+pygments>=2.17
+weasyprint>=62
