@@ -4,15 +4,15 @@ This directory contains the test suite for both `code2pdf` and `code2txt` tools.
 
 ## Setup
 
-1. Create a virtual environment:
+1. Create a virtual environment in the repo root (the launchers pick up `.venv/` automatically):
 ```bash
-python3 -m venv test_venv
-source test_venv/bin/activate  # On macOS/Linux
+python3 -m venv .venv
+source .venv/bin/activate  # On macOS/Linux
 ```
 
-2. Install test dependencies:
+2. Install runtime and test dependencies:
 ```bash
-pip install -r requirements-test.txt
+pip install -r requirements.txt -r requirements-test.txt
 ```
 
 ## Running Tests
@@ -61,6 +61,18 @@ pytest --timeout=30
   - Directory conversion
   - Error handling
 
+- **test_code2txt_output.py**: code2txt never reads its own output file
+
+- **test_launcher.py**: Launcher behaviour
+  - Works through symlinks (as created by `install.sh` or `ln -s`)
+  - `CODE2PDF_HOME` override and missing-scripts error
+  - `--help` works without PDF dependencies
+
+- **test_print_all_tmp.py**: Directory conversion safety
+  - Leaves unrelated files in `/tmp` alone and merges only its own pages
+  - Leaves no work files behind
+  - Fails fast on a missing directory
+
 - **test_integration.py**: Integration tests for both tools
   - Large repository simulation
   - Mixed content types
@@ -77,6 +89,7 @@ The `fixtures/` directory contains sample files for testing:
 
 ## Notes
 
-- Some code2pdf tests may be skipped if dependencies (vim, ghostscript, jq) are not installed
+- code2pdf tests need Pygments and WeasyPrint (in `.venv/`), plus ghostscript and jq; some skip without them
+- `bin/code2pdf` runs the scripts in this checkout, not an installed copy, so tests always exercise your working tree
 - Tests are designed to work on both Linux and macOS
 - The test suite uses subprocess to test the actual bash scripts

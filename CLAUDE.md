@@ -28,7 +28,9 @@ The project consists of:
 ## Key Components
 
 ### code2pdf (`bin/code2pdf`)
-- Supports development mode via `--dev` flag that switches between brew installation path and local development path
+- Finds its install directory from its own real location (following symlinks), or `$CODE2PDF_HOME` if set (the Homebrew formula sets it); errors out if `scripts/` is missing there
+- Puts a private Python environment first on PATH when present: `venv/` (created by `install.sh`) or `.venv/` (a checkout)
+- `--help` and usage errors are handled before dependency checks; `--dev` is accepted but does nothing (kept for compatibility)
 - Performs dependency checking for `python3`, `pygments`, `weasyprint`, `gs` (ghostscript), and `jq`
 - Routes to appropriate processing script based on `-s` (single file) or `-a` (all files) options
 - Defines default filtering rules for directory processing
@@ -79,7 +81,8 @@ The project consists of:
 
 **Font Support**:
 - Uses Noto Sans CJK fonts for Chinese/Japanese/Korean characters
-- Fonts installed in `~/.local/share/fonts/noto-cjk/`
+- macOS: no setup needed; Pango falls back to system CJK fonts (PingFang, Hiragino, Apple SD Gothic/Nanum)
+- Linux: install `fonts-noto-cjk`, or run `setup_cjk_fonts.sh` (installs to `~/.local/share/fonts/noto-cjk/`)
 - Automatic fallback to DejaVu fonts for non-CJK text
 - Monospace fonts for code: Noto Sans Mono CJK SC
 - **Installation guide**: See `docs/font_installation_guide.md`
@@ -94,11 +97,11 @@ The project consists of:
 
 ### Testing code2pdf
 
-To test changes without installing via Homebrew, use `--dev` flag (requires updating hardcoded path in `bin/code2pdf:8` to your local path):
+Run the launcher straight from the checkout; it uses this checkout's `scripts/` and `.venv/` (create it with `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`):
 
 ```bash
-./bin/code2pdf --dev -s path/to/file.py
-./bin/code2pdf --dev -a path/to/directory
+./bin/code2pdf -s path/to/file.py
+./bin/code2pdf -a path/to/directory
 ```
 
 ### Testing code2txt
@@ -158,7 +161,7 @@ def hello():
 EOF
 
 # Convert to PDF
-./bin/code2pdf --dev -s /tmp/test_chinese.py
+./bin/code2pdf -s /tmp/test_chinese.py
 ```
 
 ### Installing CJK fonts (for Chinese/Japanese/Korean support)
@@ -188,9 +191,9 @@ python3 -c "import pygments; import weasyprint" && echo "Python packages OK"
 
 ```bash
 # Set up test environment
-python3 -m venv test_venv
-source test_venv/bin/activate
-pip install -r requirements-test.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-test.txt
 
 # Run all tests
 pytest
@@ -206,6 +209,13 @@ pytest -v
 # Run specific test
 pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ```
+
+## Installation and Releases
+
+- **Users**: `brew install readbysearch/tap/code2pdf` (formula in [readbysearch/homebrew-tap](https://github.com/readbysearch/homebrew-tap)), or `install.sh` on Linux without Homebrew.
+- **Canonical repository**: `readbysearch/code2pdf` (the old `waleking/code2pdf` fork is archived).
+- **Release**: commit and push to `main`, push an annotated tag `vX.Y.Z`, then in `homebrew-tap` update the formula's `url` and `sha256` (`curl -sL https://github.com/readbysearch/code2pdf/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256`), run `brew audit --strict --online readbysearch/tap/code2pdf`, and push. Details: `what_to_do_after_update_for_developer.md` in the tap repo.
+- The formula installs Pygments + WeasyPrint into its own virtualenv and sets `CODE2PDF_HOME`, so the scripts' plain `python3` must stay compatible with that.
 
 ## File Processing Logic
 
@@ -259,7 +269,9 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 
 ## Common Issues
 
-**DEV_MODE path**: The `--dev` flag uses a hardcoded macOS path (`/Users/huangweijing/git/code2pdf`). Update `bin/code2pdf:8` when testing locally.
+**Which copy runs**: `bin/code2pdf` always uses the `scripts/` next to its real location, so `./bin/code2pdf` tests your working tree, while `code2pdf` on PATH runs the installed copy (Homebrew: `$(brew --prefix)/opt/code2pdf`).
+
+**code2txt output file**: the output file is skipped by real path, so writing it inside the scanned directory is safe.
 
 **Whitespace in paths**: All scripts properly quote variables to handle spaces in file/folder names.
 
@@ -275,19 +287,22 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 - Check font availability: `fc-list | grep -i "noto.*cjk"`
 
 **Python dependency issues**:
-- Install Pygments: `pip3 install --user pygments`
-- Install WeasyPrint: `pip3 install --user weasyprint`
-- WeasyPrint requires system libraries (see docs/font_installation_guide.md)
+- Homebrew install: `brew reinstall readbysearch/tap/code2pdf` (bundles both packages)
+- Checkout: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` (Homebrew's Python rejects `pip install --user`)
+- WeasyPrint needs Pango: `brew install pango` / `apt install libpango-1.0-0 libpangoft2-1.0-0`
 
 ## Testing
 
 ### Test Suite Overview
-- **34 automated tests** covering both tools
+- **44 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
-  - code2txt: 16 unit tests
-  - code2pdf: 10 unit tests
-  - Integration: 8 tests
+  - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
+  - code2pdf: 10 unit tests (`test_code2pdf.py`)
+  - Launchers: 5 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies
+  - Directory conversion: 4 tests (`test_print_all_tmp.py`): `/tmp` isolation, missing directory
+  - Integration: 8 tests (`test_integration.py`)
+- code2pdf tests need Pygments and WeasyPrint in `.venv/` (see Running Automated Tests); they skip or fail without them
 - **Test fixtures**: Sample projects and edge cases in `tests/fixtures/`
 - **Configuration**: `pytest.ini` excludes fixture directories from test discovery
 
@@ -311,6 +326,9 @@ pytest tests/test_code2txt.py  # Run specific test file
 bin/
   code2pdf                      # Main PDF CLI entry point
   code2txt                      # Main text CLI entry point
+install.sh                      # Installer for Linux without Homebrew (private venv + symlinks)
+requirements.txt                # Runtime Python packages (pygments, weasyprint)
+requirements-test.txt           # Test dependencies
 scripts/
   code_to_pdf.py                # Python script: source code → PDF (UTF-8 support)
   print_single_file_to_pdf.sh   # Bash wrapper for single file PDF

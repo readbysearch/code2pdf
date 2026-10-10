@@ -21,29 +21,7 @@ Convert source code files to PDF or combine them into a single text file, with t
 
 ## Installation
 
-### Quick Install Script (Linux - Recommended)
-
-Install both tools with a single command:
-
-```bash
-# Install for current user (no sudo required)
-curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --user
-
-# Or install system-wide (requires sudo)
-curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --system
-
-# Interactive installation (choose user/system during install)
-curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash
-```
-
-**Install Script Features:**
-- ✅ Automatic dependency checking
-- ✅ Cross-platform Linux support  
-- ✅ User or system-wide installation
-- ✅ Automatic PATH configuration
-- ✅ Works on Ubuntu, CentOS, Fedora, RHEL, etc.
-
-### Via Homebrew (macOS and Linux)
+### Homebrew (macOS and Linux — recommended)
 
 ```bash
 brew install readbysearch/tap/code2pdf
@@ -51,58 +29,47 @@ brew install readbysearch/tap/code2pdf
 
 Installs both `code2pdf` and `code2txt` with everything they need (Python, Pygments,
 WeasyPrint, Pango, Ghostscript, jq) in a private environment — no `pip install` required.
-On macOS, Chinese/Japanese/Korean text renders with the system fonts.
 
-### Manual Installation
+### Install script (Linux without Homebrew)
 
-#### Prerequisites
+Install the system packages first, then run the script:
 
-For code2pdf:
-- Python 3 (with pip)
-- Ghostscript (for PDF merging)
-- jq (for JSON processing)
-- Bash shell (Unix-like systems)
+```bash
+# Ubuntu/Debian
+sudo apt install curl python3-venv ghostscript jq libpango-1.0-0 libpangoft2-1.0-0 fonts-noto-cjk
+# Fedora/RHEL
+sudo dnf install curl python3 ghostscript jq pango google-noto-sans-cjk-fonts
 
-For code2txt:
-- Bash shell (Unix-like systems)
-- No additional dependencies required
+# Install for current user (~/.local, no sudo)
+curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --user
 
-#### Installation Steps
+# Or system-wide (/usr/local, requires sudo)
+curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --system
+```
 
-1. Clone the repository
+The script copies the tools to `~/.local/share/code2pdf` (or `/usr/local/share/code2pdf`),
+creates a private Python environment there with Pygments and WeasyPrint, links the commands
+into `~/.local/bin` (or `/usr/local/bin`), and verifies the install by converting a test file.
+Re-run it to upgrade; `--ref v3.2` installs a specific release.
+
+### From a checkout (development)
+
 ```bash
 git clone https://github.com/readbysearch/code2pdf.git
 cd code2pdf
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt   # pygments, weasyprint
+# also needed: ghostscript and jq (brew install ghostscript jq / apt install ghostscript jq)
+
+./bin/code2pdf -s myfile.py   # uses ./scripts and ./.venv automatically
 ```
 
-2. Install dependencies
+The launchers find their scripts relative to their own location (following symlinks),
+so you can also link them onto your PATH:
+
 ```bash
-# macOS example
-brew install python3 ghostscript jq
-
-# Install Python packages
-pip3 install --user pygments weasyprint
-```
-
-3. **(Optional) Install CJK fonts for Chinese/Japanese/Korean support**
-```bash
-# For Simplified Chinese (most common)
-./scripts/setup_cjk_fonts.sh sc
-
-# For other languages: tc (Traditional Chinese), jp (Japanese), kr (Korean), all (all languages)
-# See docs/font_installation_guide.md for details
-```
-
-4. Make the scripts executable
-```bash
-chmod +x bin/code2pdf bin/code2txt
-chmod +x scripts/*.sh
-```
-
-5. Add to your PATH (optional)
-```bash
-ln -s "$(pwd)/bin/code2pdf" /usr/local/bin/code2pdf
-ln -s "$(pwd)/bin/code2txt" /usr/local/bin/code2txt
+ln -s "$(pwd)/bin/code2pdf" ~/.local/bin/code2pdf
+ln -s "$(pwd)/bin/code2txt" ~/.local/bin/code2txt
 ```
 
 ## Usage
@@ -124,23 +91,22 @@ Show help:
 code2pdf --help
 ```
 
+Output: `-s` writes `<name>.pdf` to the current directory; `-a` writes `merged.pdf`
+(table of contents first) into the directory you converted.
+
 ## CJK Font Support
 
-If your code contains Chinese, Japanese, or Korean characters, you need to install CJK fonts:
+Chinese, Japanese and Korean text works out of the box on **macOS** — the system fonts
+(PingFang, Hiragino, Apple SD Gothic/Nanum) are used automatically.
+
+On **Linux**, install CJK fonts if your code contains them: `sudo apt install fonts-noto-cjk`
+(Debian/Ubuntu), or use the bundled script for a per-user install:
 
 ```bash
-# Quick setup for Simplified Chinese
-./scripts/setup_cjk_fonts.sh sc
+./scripts/setup_cjk_fonts.sh sc   # sc, tc, jp, kr, or all (~150 MB)
 ```
 
 **Full documentation**: [docs/font_installation_guide.md](docs/font_installation_guide.md)
-
-**Supported languages**:
-- `sc` - Simplified Chinese (简体中文)
-- `tc` - Traditional Chinese (繁體中文)
-- `jp` - Japanese (日本語)
-- `kr` - Korean (한국어)
-- `all` - All CJK languages (~150 MB)
 
 ### code2txt - Combine to Text File
 
@@ -202,11 +168,11 @@ The project includes a comprehensive test suite using pytest. Tests cover both c
 
 ### Running Tests
 
-1. Set up test environment:
+1. Set up test environment (the code2pdf tests need the runtime packages too):
 ```bash
-python3 -m venv test_venv
-source test_venv/bin/activate
-pip install -r requirements-test.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-test.txt
 ```
 
 2. Run tests:
