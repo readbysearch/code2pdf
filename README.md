@@ -50,7 +50,7 @@ curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.s
 The script copies the tools to `~/.local/share/code2pdf` (or `/usr/local/share/code2pdf`),
 creates a private Python environment there with Pygments and WeasyPrint, links the commands
 into `~/.local/bin` (or `/usr/local/bin`), and verifies the install by converting a test file.
-Re-run it to upgrade; `--ref v3.2` installs a specific release.
+Re-run it to upgrade; `--ref v3.3` installs a specific release.
 
 ### From a checkout (development)
 

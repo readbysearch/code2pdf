@@ -74,7 +74,7 @@ pytest --timeout=30
   - Relative page headers, CJK, no Ghostscript needed, clear error when nothing matches
 
 - **test_print_all_tmp.py**: Directory conversion safety
-  - Leaves unrelated files in `/tmp` alone and merges only its own pages
+  - Leaves unrelated files in `/tmp` alone; the PDF contains only its own pages
   - Leaves no work files behind
   - Fails fast on a missing directory
 
