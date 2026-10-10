@@ -19,6 +19,7 @@ The project consists of:
 ### Processing Scripts
 - **`scripts/code_to_pdf.py`** - Single-file mode (same design, no contents page) and shared helpers (`lexer_for`, `read_source`)
 - **`scripts/theme.py`** - Themes (paper, mono, any Pygments style), bundled font setup and page CSS
+- **`scripts/progress.py`** - Page estimate and progress display ([1/3] preparing, [2/3] layout per page, [3/3] writing)
 - **`fonts/`** - Bundled IBM Plex Mono/Sans TTFs (OFL 1.1); found relative to `scripts/` in every install layout
 - **`scripts/print_single_file_to_pdf.sh`** - Converts individual files to PDF using Python script
 - **`scripts/print_all.sh`** - Thin wrapper: validates the directory and runs `dir_to_pdf.py`
@@ -45,6 +46,7 @@ The project consists of:
 - Language: by file name, else by a `#!` line (`lexer_for(path, source)`), else plain text
 - Layout: line numbers in the left margin (`::before` counters on Pygments `linespans`), wrapped lines hang under the code; each file opens with folder, name and details; page header = path (left) and `project, date` (right)
 - Dates (`source_info`): contents page shows `Printed <date> from commit <hash> (<branch>)` (+ `with uncommitted changes`); each file shows `last changed <date>` (one streamed `git log --relative`), `uncommitted changes` (from `git status`), or `modified <date>` outside git. `$SOURCE_DATE_EPOCH` fixes the printing date; PDF metadata gets title and creation time
+- Progress: `render_document` forwards WeasyPrint's `weasyprint.progress` log (Step 1 / per-page Step 5 / Step 6) to `progress.Progress`; `estimate_pages` predicts the total from rows (wrapped at 89 columns, 59 rows per page), exact on ClaudeTerminal (873 pages). In a terminal a ticker thread keeps the two silent stages moving; `-q`/`--quiet`/`$CODE2PDF_QUIET` turns it off. Measured on ClaudeTerminal (189 files, 41k lines): 0:13 preparing, 0:27 layout, 0:18 writing, ~4.5 GB peak memory
 - One block per code line costs ~60% more render time than the v3.3 markup (7.8 s vs 4.9 s for this repo); it is what makes wrapped lines hang cleanly
 
 ### code2txt (`bin/code2txt`)
@@ -292,7 +294,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ## Testing
 
 ### Test Suite Overview
-- **76 automated tests** covering both tools
+- **84 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
   - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
@@ -301,6 +303,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
   - Directory conversion: 4 tests (`test_print_all_tmp.py`): `/tmp` isolation, missing directory
   - One-pass renderer: 12 tests (`test_dir_to_pdf.py`): filter parity with the old bash rules, table of contents first with correct page numbers, relative headers, no Ghostscript needed
   - Design: 17 tests (`test_design.py`): themes, embedded Plex fonts, `#!` language detection, git/mtime dates, printing date, grouped contents page, single-file design
+  - Progress: 8 tests (`test_progress.py`): page estimate, terminal vs log output, ticking silent stages, time left, quiet
   - Integration: 8 tests (`test_integration.py`)
 - code2pdf tests need Pygments and WeasyPrint in `.venv/` (see Running Automated Tests); they skip or fail without them
 - **Test fixtures**: Sample projects and edge cases in `tests/fixtures/`
@@ -334,6 +337,7 @@ scripts/
   print_single_file_to_pdf.sh   # Bash wrapper for single file PDF
   print_all.sh                  # Directory conversion entry point (wraps dir_to_pdf.py)
   theme.py                      # Themes, bundled fonts, page CSS
+  progress.py                   # Page estimate and progress display
   dir_to_pdf.py                 # One-pass directory → PDF renderer with table of contents
   combine_to_txt.sh             # Text combination script
   setup_cjk_fonts.sh            # CJK font installation script
