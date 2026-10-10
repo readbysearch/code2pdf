@@ -72,4 +72,5 @@ def main(argv):
 
 if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    sys.exit(main(sys.argv[1:]))
+    import dir_to_pdf
+    sys.exit(dir_to_pdf.run_main(main, sys.argv[1:]))

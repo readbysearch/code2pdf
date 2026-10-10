@@ -14,6 +14,7 @@ Things that need the whole document are done afterwards:
 
 import logging
 import os
+import signal
 import sys
 import tempfile
 import time
@@ -77,6 +78,18 @@ _STARTED = time.monotonic()
 def _init_worker(queue):
     global _QUEUE
     _QUEUE = queue
+    # Ctrl-C reaches the whole process group: let the parent handle it and stop the workers
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
+def _stop_workers(pool):
+    """Kill running parts now; shutdown() alone would wait for each to finish its part."""
+    if hasattr(pool, "terminate_workers"):  # Python 3.14+
+        pool.terminate_workers()
+        return
+    for process in list((getattr(pool, "_processes", None) or {}).values()):
+        process.terminate()
+    pool.shutdown(wait=False, cancel_futures=True)
 
 
 class _PageReporter(logging.Handler):
@@ -173,8 +186,9 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
         progress.preparing()
         laid_out = [0] * len(job_list)
         results = {}
-        with ProcessPoolExecutor(max_workers=jobs, mp_context=context,
-                                 initializer=_init_worker, initargs=(queue,)) as pool:
+        pool = ProcessPoolExecutor(max_workers=jobs, mp_context=context,
+                                   initializer=_init_worker, initargs=(queue,))
+        try:
             futures = [pool.submit(render_part, job) for job in job_list]
             while len(results) < len(futures):
                 try:
@@ -191,6 +205,11 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
                     if future.done() and id(future) not in results:
                         result = future.result()  # re-raises a child's exception
                         results[id(future)] = result
+        except BaseException:
+            _stop_workers(pool)
+            raise
+        finally:
+            pool.shutdown(wait=True)
         results = sorted(results.values(), key=lambda r: r["part"])
         mark = _timing("render parts", mark)
 

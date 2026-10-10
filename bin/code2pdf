@@ -250,7 +250,7 @@ main() {
            ;;
        -s|--single)
            shift
-           "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "$1" "$(pwd)" "$OUTPUT"
+           exec "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "$1" "$(pwd)" "$OUTPUT"
            ;;
        -a|--all)
            shift
@@ -264,7 +264,8 @@ main() {
            [ -n "$OUTPUT" ] && SELECT_ARGS+=(--output "$OUTPUT")
            [ -n "$FILES_FROM" ] && SELECT_ARGS+=(--files-from "$FILES_FROM")
            
-           "$SCRIPTS_DIR/print_all.sh" "$1" \
+           # exec: a signal sent to code2pdf (e.g. a command timeout) reaches the renderer
+           exec "$SCRIPTS_DIR/print_all.sh" "$1" \
                "$DEFAULT_BLACKLIST" \
                "$DEFAULT_BLACKLIST_PATTERN" \
                "$DEFAULT_WHITELIST_EXTENSIONS" \

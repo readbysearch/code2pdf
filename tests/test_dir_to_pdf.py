@@ -155,7 +155,14 @@ class TestGlobs:
         (tree / "sub" / "blob.js").write_bytes(b"\x00\x01binary")
         files, result = listed_in_order(tree, "--include", "sub")
         assert "sub/blob.js" not in files
-        assert "Skipping binary file: sub/blob.js" in result.stderr
+        assert "Skipped 1 binary file: sub/blob.js" in result.stderr
+
+    def test_many_binary_files_are_reported_in_one_line(self, tree):
+        for i in range(30):
+            (tree / "sub" / f"img{i:02d}.js").write_bytes(b"\x00png")
+        _, result = listed_in_order(tree, "--include", "sub")
+        assert result.stderr.count("\n") == 1, result.stderr
+        assert "Skipped 30 binary files: sub/img00.js, sub/img01.js, sub/img02.js, …" in result.stderr
 
 
 class TestFilesFrom:
