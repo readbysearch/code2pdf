@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # code2pdf and code2txt Installation Script
-# Installs code2pdf and code2txt tools on Linux systems
+# Installs both tools with a private Python environment (Pygments + WeasyPrint).
+# On macOS, prefer Homebrew: brew install readbysearch/tap/code2pdf
 
 set -e  # Exit on any error
 
@@ -12,15 +13,25 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Print colored output
+print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
 # Configuration
 GITHUB_REPO="readbysearch/code2pdf"
 INSTALL_DIR_SYSTEM="/usr/local/bin"
 INSTALL_DIR_USER="$HOME/.local/bin"
+SHARE_DIR_SYSTEM="/usr/local/share/code2pdf"
+SHARE_DIR_USER="$HOME/.local/share/code2pdf"
 
 # Command line options
 USER_INSTALL=false
 SYSTEM_INSTALL=false
 FORCE=false
+SOURCE_DIR=""
+REF="main"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -37,14 +48,24 @@ while [[ $# -gt 0 ]]; do
             FORCE=true
             shift
             ;;
+        --from)
+            SOURCE_DIR="$2"
+            shift 2
+            ;;
+        --ref)
+            REF="$2"
+            shift 2
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --user     Install for current user only (~/.local/bin)"
-            echo "  --system   Install system-wide (/usr/local/bin, requires sudo)"
-            echo "  --force    Skip confirmations"
-            echo "  -h, --help Show this help message"
+            echo "  --user       Install for current user only (~/.local/bin)"
+            echo "  --system     Install system-wide (/usr/local/bin, requires sudo)"
+            echo "  --force      Skip confirmations"
+            echo "  --from DIR   Install from a local checkout instead of downloading"
+            echo "  --ref REF    Branch or tag to download (default: main)"
+            echo "  -h, --help   Show this help message"
             echo ""
             exit 0
             ;;
@@ -55,11 +76,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Print colored output
-print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+# Ask a yes/no question; reads the terminal so it also works under `curl ... | bash`
+confirm() {
+    [[ "$FORCE" == true ]] && return 0
+    local reply
+    read -p "$1 (y/n): " -n 1 -r reply < /dev/tty
+    echo
+    [[ $reply =~ ^[Yy]$ ]]
+}
 
 # Display header
 print_header() {
@@ -78,267 +102,181 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Detect OS and architecture
+# Detect OS
 detect_system() {
     print_info "Detecting system information..."
-    
-    # OS Detection
+
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
         OS="linux"
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         OS="macos"
-        print_warning "This script is optimized for Linux. For macOS, consider using Homebrew."
-        if [[ "$FORCE" != true ]]; then
-            read -p "Continue anyway? (y/n): " -n 1 -r
-            echo
-            [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
-        fi
+        print_warning "On macOS, Homebrew is the recommended install:"
+        echo "  brew install readbysearch/tap/code2pdf"
+        confirm "Continue with this script anyway?" || exit 1
     else
         print_error "Unsupported operating system: $OSTYPE"
         exit 1
     fi
-    
-    # Architecture Detection
-    ARCH=$(uname -m)
-    case $ARCH in
-        x86_64) ARCH="x86_64" ;;
-        aarch64) ARCH="arm64" ;;
-        arm64) ARCH="arm64" ;;
-        *) print_warning "Unsupported architecture: $ARCH. Continuing anyway..." ;;
-    esac
-    
-    print_success "Detected: $OS ($ARCH)"
+
+    print_success "Detected: $OS ($(uname -m))"
 }
 
-# Check and install dependencies
+# Check dependencies
 check_dependencies() {
     print_info "Checking dependencies..."
-    
-    local missing_deps=()
-    local optional_deps=()
-    
-    # Check required tools
-    if ! command_exists "curl" && ! command_exists "wget"; then
-        missing_deps+=("curl or wget")
+
+    local missing=()
+
+    if [[ -z "$SOURCE_DIR" ]] && ! command_exists "curl" && ! command_exists "wget"; then
+        missing+=("curl or wget")
     fi
-    
-    # Check for extraction tools (unzip or tar)
-    if ! command_exists "unzip" && ! command_exists "tar"; then
-        missing_deps+=("unzip or tar")
+    if ! command_exists "tar"; then
+        missing+=("tar")
     fi
-    
-    # Check code2pdf dependencies (optional)
-    if ! command_exists "vim"; then
-        optional_deps+=("vim")
+    if ! command_exists "python3" || ! python3 -m venv --help >/dev/null 2>&1; then
+        missing+=("python3 (with venv)")
     fi
-    
     if ! command_exists "gs"; then
-        optional_deps+=("ghostscript")
+        missing+=("ghostscript")
     fi
-    
     if ! command_exists "jq"; then
-        optional_deps+=("jq")
+        missing+=("jq")
     fi
-    
-    # Handle missing required dependencies
-    if [[ ${#missing_deps[@]} -ne 0 ]]; then
-        print_error "Missing required dependencies: ${missing_deps[*]}"
-        print_info "Please install them first:"
-        echo "  Ubuntu/Debian: sudo apt update && sudo apt install curl unzip (or tar is fine too)"
-        echo "  CentOS/RHEL:   sudo yum install curl unzip (or tar is fine too)"
-        echo "  Fedora:        sudo dnf install curl unzip (or tar is fine too)"
+
+    if [[ ${#missing[@]} -ne 0 ]]; then
+        print_error "Missing required dependencies: ${missing[*]}"
+        echo "Install them first:"
+        echo "  Ubuntu/Debian: sudo apt install curl python3-venv ghostscript jq libpango-1.0-0 libpangoft2-1.0-0"
+        echo "  Fedora/RHEL:   sudo dnf install curl python3 ghostscript jq pango"
+        echo "  macOS:         brew install readbysearch/tap/code2pdf  (installs everything)"
         exit 1
     fi
-    
-    # Handle optional dependencies
-    if [[ ${#optional_deps[@]} -ne 0 ]]; then
-        print_warning "Optional dependencies for code2pdf: ${optional_deps[*]}"
-        echo ""
-        echo "To install them:"
-        echo "  Ubuntu/Debian: sudo apt install vim ghostscript jq"
-        echo "  CentOS/RHEL:   sudo yum install vim ghostscript jq"
-        echo "  Fedora:        sudo dnf install vim ghostscript jq"
-        echo ""
-        echo "code2txt will work without these. code2pdf requires vim and ghostscript."
-        echo ""
-        if [[ "$FORCE" != true ]]; then
-            read -p "Continue installation? (y/n): " -n 1 -r
-            echo
-            [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
-        else
-            print_info "Continuing with --force flag"
-        fi
-    else
-        print_success "All dependencies are available!"
-    fi
+
+    print_success "All dependencies are available!"
 }
 
-# Determine install directory and check permissions
+# Determine install directories
 determine_install_dir() {
     print_info "Determining installation directory..."
-    
-    # Handle command line options first
+
+    if [[ "$SYSTEM_INSTALL" != true && "$USER_INSTALL" != true ]]; then
+        if [[ -w "$INSTALL_DIR_SYSTEM" ]] || [[ $EUID -eq 0 ]]; then
+            SYSTEM_INSTALL=true
+        elif [[ "$FORCE" == true ]]; then
+            USER_INSTALL=true
+        else
+            echo "Options:"
+            echo "  1) Install system-wide (requires sudo) - available for all users"
+            echo "  2) Install for current user only - no sudo required"
+            echo ""
+            local reply
+            read -p "Choose option (1 or 2): " -n 1 -r reply < /dev/tty
+            echo
+            if [[ $reply == "1" ]]; then SYSTEM_INSTALL=true; else USER_INSTALL=true; fi
+        fi
+    fi
+
     if [[ "$SYSTEM_INSTALL" == true ]]; then
         INSTALL_DIR="$INSTALL_DIR_SYSTEM"
-        USE_SUDO=true
-        print_info "Installing system-wide (--system flag): $INSTALL_DIR"
-        return
-    elif [[ "$USER_INSTALL" == true ]]; then
-        INSTALL_DIR="$INSTALL_DIR_USER"
-        USE_SUDO=false
-        print_info "Installing for current user (--user flag): $INSTALL_DIR"
-        mkdir -p "$INSTALL_DIR"
-        return
-    fi
-    
-    # Check if we can write to system directory
-    if [[ -w "$INSTALL_DIR_SYSTEM" ]] || [[ $EUID -eq 0 ]]; then
-        INSTALL_DIR="$INSTALL_DIR_SYSTEM"
-        print_info "Installing to system directory: $INSTALL_DIR"
+        SHARE_DIR="$SHARE_DIR_SYSTEM"
+        if [[ $EUID -eq 0 ]] || [[ -w "$INSTALL_DIR_SYSTEM" ]]; then SUDO=""; else SUDO="sudo"; fi
     else
-        # Check if user wants to install system-wide
-        print_info "System directory requires sudo access."
-        echo "Options:"
-        echo "  1) Install system-wide (requires sudo) - available for all users"
-        echo "  2) Install for current user only - no sudo required"
-        echo ""
-        read -p "Choose option (1 or 2): " -n 1 -r
-        echo
-        
-        if [[ $REPLY == "1" ]]; then
-            INSTALL_DIR="$INSTALL_DIR_SYSTEM"
-            USE_SUDO=true
-            print_info "Will install system-wide using sudo"
-        else
-            INSTALL_DIR="$INSTALL_DIR_USER"
-            USE_SUDO=false
-            print_info "Installing for current user: $INSTALL_DIR"
-            # Create user bin directory if it doesn't exist
-            mkdir -p "$INSTALL_DIR"
-        fi
+        INSTALL_DIR="$INSTALL_DIR_USER"
+        SHARE_DIR="$SHARE_DIR_USER"
+        SUDO=""
     fi
+    print_info "Commands: $INSTALL_DIR   Files: $SHARE_DIR"
 }
 
-# Download and install files
-install_tools() {
-    print_info "Downloading and installing tools..."
-    
-    # Create temporary directory
+# Fetch the source tree into $SRC
+fetch_source() {
+    if [[ -n "$SOURCE_DIR" ]]; then
+        SRC="$(cd "$SOURCE_DIR" && pwd)"
+        print_info "Installing from local checkout: $SRC"
+        return
+    fi
+
     TEMP_DIR=$(mktemp -d)
-    trap "rm -rf $TEMP_DIR" EXIT
-    
-    # Download method
-    local download_cmd
+    trap 'rm -rf "$TEMP_DIR"' EXIT
+    local url="https://github.com/$GITHUB_REPO/archive/$REF.tar.gz"
+    print_info "Downloading $url"
     if command_exists "curl"; then
-        download_cmd="curl -L -o"
-    elif command_exists "wget"; then
-        download_cmd="wget -O"
+        curl -fsSL "$url" -o "$TEMP_DIR/code2pdf.tar.gz"
     else
-        print_error "Neither curl nor wget is available"
+        wget -q "$url" -O "$TEMP_DIR/code2pdf.tar.gz"
+    fi
+    tar -xzf "$TEMP_DIR/code2pdf.tar.gz" -C "$TEMP_DIR"
+    SRC="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"
+}
+
+# Copy files, build the private Python environment, link the commands
+install_tools() {
+    fetch_source
+
+    if [[ ! -f "$SRC/bin/code2pdf" || ! -f "$SRC/scripts/print_all.sh" ]]; then
+        print_error "$SRC does not look like a code2pdf source tree"
         exit 1
     fi
-    
-    # Download the repository (try tar.gz first, then zip)
-    print_info "Downloading from GitHub..."
-    cd "$TEMP_DIR"
-    
-    # Try tar.gz first (works without unzip)
-    if command_exists "tar"; then
-        print_info "Using tar.gz archive..."
-        if command_exists "curl"; then
-            curl -L "https://github.com/$GITHUB_REPO/archive/main.tar.gz" -o code2pdf.tar.gz
+
+    # Replace a previous install (only if it is really ours)
+    if [[ -d "$SHARE_DIR" ]]; then
+        if [[ -f "$SHARE_DIR/scripts/print_all.sh" ]]; then
+            print_info "Replacing previous install in $SHARE_DIR"
+            $SUDO rm -rf "$SHARE_DIR"
         else
-            wget "https://github.com/$GITHUB_REPO/archive/main.tar.gz" -O code2pdf.tar.gz
+            print_error "$SHARE_DIR exists but is not a code2pdf install; remove it first"
+            exit 1
         fi
-        
-        # Extract with tar
-        print_info "Extracting files with tar..."
-        tar -xzf code2pdf.tar.gz
-        cd "code2pdf-main"
-    elif command_exists "unzip"; then
-        print_info "Using zip archive..."
-        if command_exists "curl"; then
-            curl -L "https://github.com/$GITHUB_REPO/archive/main.zip" -o code2pdf.zip
-        else
-            wget "https://github.com/$GITHUB_REPO/archive/main.zip" -O code2pdf.zip
-        fi
-        
-        # Extract with unzip
-        print_info "Extracting files with unzip..."
-        unzip -q code2pdf.zip
-        cd "code2pdf-main"
-    else
-        print_error "Neither tar nor unzip is available for extraction"
+    fi
+
+    print_info "Installing files..."
+    $SUDO mkdir -p "$SHARE_DIR" "$INSTALL_DIR"
+    $SUDO cp -R "$SRC/bin" "$SRC/scripts" "$SRC/config" "$SRC/requirements.txt" "$SHARE_DIR/"
+    $SUDO chmod +x "$SHARE_DIR"/bin/* "$SHARE_DIR"/scripts/*.sh
+
+    print_info "Creating Python environment with Pygments and WeasyPrint..."
+    $SUDO python3 -m venv "$SHARE_DIR/venv"
+    $SUDO "$SHARE_DIR/venv/bin/python3" -m pip install --quiet --disable-pip-version-check -r "$SHARE_DIR/requirements.txt"
+
+    # The launchers find $SHARE_DIR by following these links
+    for cmd in code2pdf code2txt; do
+        $SUDO ln -sf "$SHARE_DIR/bin/$cmd" "$INSTALL_DIR/$cmd"
+    done
+
+    if ! "$SHARE_DIR/venv/bin/python3" -c "import weasyprint" 2>/dev/null; then
+        print_error "WeasyPrint is installed but cannot load its system libraries (Pango)."
+        echo "  Ubuntu/Debian: sudo apt install libpango-1.0-0 libpangoft2-1.0-0"
+        echo "  Fedora/RHEL:   sudo dnf install pango"
+        echo "Then re-run this installer. code2txt works already; code2pdf needs Pango."
         exit 1
     fi
-    
-    # Install binary files
-    print_info "Installing tools..."
-    
-    local install_cmd=""
-    if [[ "$USE_SUDO" == true ]]; then
-        install_cmd="sudo"
-    fi
-    
-    # Install main scripts
-    $install_cmd cp bin/code2pdf bin/code2txt "$INSTALL_DIR/"
-    $install_cmd chmod +x "$INSTALL_DIR/code2pdf" "$INSTALL_DIR/code2txt"
-    
-    # Create scripts directory and install processing scripts
-    local scripts_install_dir
-    if [[ "$USE_SUDO" == true ]]; then
-        scripts_install_dir="/usr/local/share/code2pdf"
-        sudo mkdir -p "$scripts_install_dir"
-        sudo cp -r scripts config "$scripts_install_dir/"
-        sudo chmod +x "$scripts_install_dir"/scripts/*.sh
-        
-        # Update code2pdf to use correct paths (disable brew, set direct paths)
-        sudo sed -i "s|BREW_PREFIX=\"\$(brew --prefix)\"|# BREW_PREFIX=\"\$(brew --prefix)\" # Disabled for Linux install|g" "$INSTALL_DIR/code2pdf"
-        sudo sed -i "s|INSTALL_DIR=\"\$BREW_PREFIX/opt/code2pdf\"|INSTALL_DIR=\"$scripts_install_dir\"|g" "$INSTALL_DIR/code2pdf"
-        
-        # Update code2txt to use the correct scripts directory  
-        sudo sed -i "s|SCRIPTS_DIR=\"\$INSTALL_DIR/scripts\"|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2txt"
-    else
-        scripts_install_dir="$HOME/.local/share/code2pdf"
-        mkdir -p "$scripts_install_dir"
-        cp -r scripts config "$scripts_install_dir/"
-        chmod +x "$scripts_install_dir"/scripts/*.sh
-        
-        # Update code2pdf to use correct paths (disable brew, set direct paths)
-        sed -i "s|BREW_PREFIX=\"\$(brew --prefix)\"|# BREW_PREFIX=\"\$(brew --prefix)\" # Disabled for Linux install|g" "$INSTALL_DIR/code2pdf"
-        sed -i "s|INSTALL_DIR=\"\$BREW_PREFIX/opt/code2pdf\"|INSTALL_DIR=\"$scripts_install_dir\"|g" "$INSTALL_DIR/code2pdf"
-        
-        # Update code2txt to use the correct scripts directory
-        sed -i "s|SCRIPTS_DIR=\"\$INSTALL_DIR/scripts\"|SCRIPTS_DIR=\"$scripts_install_dir/scripts\"|g" "$INSTALL_DIR/code2txt"
-    fi
-    
+
     print_success "Tools installed successfully!"
 }
 
 # Configure PATH
 configure_path() {
     print_info "Configuring PATH..."
-    
+
     # Skip if installing to system directory (already in PATH)
     if [[ "$INSTALL_DIR" == "$INSTALL_DIR_SYSTEM" ]]; then
         print_info "System directory is already in PATH"
         return
     fi
-    
+
     # Check if already in PATH
     if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
         print_info "$INSTALL_DIR is already in PATH"
         return
     fi
-    
+
     # Add to shell configuration files
     local shell_configs=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile")
     local updated_configs=()
-    
+
     for config_file in "${shell_configs[@]}"; do
         if [[ -f "$config_file" ]]; then
-            # Check if our PATH export is already there
-            if ! grep -q "/.local/bin.*code2pdf" "$config_file" 2>/dev/null; then
+            if ! grep -q "# Added by code2pdf installer" "$config_file" 2>/dev/null; then
                 echo "" >> "$config_file"
                 echo "# Added by code2pdf installer" >> "$config_file"
                 echo "export PATH=\"\$PATH:$INSTALL_DIR\"" >> "$config_file"
@@ -346,7 +284,7 @@ configure_path() {
             fi
         fi
     done
-    
+
     if [[ ${#updated_configs[@]} -gt 0 ]]; then
         print_success "Updated PATH in: ${updated_configs[*]}"
         print_warning "Please restart your shell or run: source ~/.bashrc"
@@ -355,27 +293,32 @@ configure_path() {
     fi
 }
 
-# Verify installation
+# Verify installation by converting a real file
 verify_installation() {
     print_info "Verifying installation..."
-    
-    # Test if commands are accessible
-    export PATH="$PATH:$INSTALL_DIR"
-    
-    if command_exists "code2txt"; then
-        print_success "code2txt is installed and accessible"
-        code2txt --help >/dev/null 2>&1 && print_success "code2txt runs correctly"
-    else
-        print_error "code2txt is not accessible in PATH"
+
+    local check_dir
+    check_dir=$(mktemp -d)
+    printf '# code2pdf check 你好\nprint("ok")\n' > "$check_dir/check.py"
+
+    if ! (cd "$check_dir" && "$INSTALL_DIR/code2txt" -o out.md . >/dev/null 2>&1 && grep -q 'print("ok")' out.md); then
+        print_error "code2txt did not run correctly"
+        rm -rf "$check_dir"
         return 1
     fi
-    
-    if command_exists "code2pdf"; then
-        print_success "code2pdf is installed and accessible"
-        code2pdf --help >/dev/null 2>&1 && print_success "code2pdf runs correctly"
-    else
-        print_error "code2pdf is not accessible in PATH"
+    print_success "code2txt runs correctly"
+
+    if ! (cd "$check_dir" && "$INSTALL_DIR/code2pdf" -s check.py >/dev/null 2>&1 && [[ -s check.pdf ]]); then
+        print_error "code2pdf could not create a PDF; run: $INSTALL_DIR/code2pdf -s <file> to see the error"
+        rm -rf "$check_dir"
         return 1
+    fi
+    print_success "code2pdf runs correctly"
+    rm -rf "$check_dir"
+
+    if [[ "$OS" == "linux" ]] && command_exists fc-list && ! fc-list :lang=zh 2>/dev/null | grep -q .; then
+        print_warning "No Chinese/Japanese/Korean fonts found. For CJK text run:"
+        echo "  $SHARE_DIR/scripts/setup_cjk_fonts.sh sc   (or: sudo apt install fonts-noto-cjk)"
     fi
 }
 
@@ -386,24 +329,13 @@ show_usage() {
     echo "║                          Installation Complete!                      ║"
     echo "╚══════════════════════════════════════════════════════════════════════╝"
     echo ""
-    print_success "Tools are now installed and ready to use!"
-    echo ""
     echo "Usage examples:"
     echo "  code2txt                           # Process current directory"
     echo "  code2txt --include-types js,py     # Only include specific file types"
     echo "  code2pdf -a /path/to/project       # Convert project to PDF"
     echo "  code2pdf -s single_file.py         # Convert single file to PDF"
     echo ""
-    echo "For help:"
-    echo "  code2txt --help"
-    echo "  code2pdf --help"
-    echo ""
-    
-    if [[ "$INSTALL_DIR" != "$INSTALL_DIR_SYSTEM" ]]; then
-        print_info "If commands are not found, restart your shell or run:"
-        echo "  source ~/.bashrc"
-    fi
-    
+    echo "To uninstall: rm -rf \"$SHARE_DIR\" \"$INSTALL_DIR/code2pdf\" \"$INSTALL_DIR/code2txt\""
     echo ""
     print_info "GitHub: https://github.com/$GITHUB_REPO"
 }
@@ -411,18 +343,17 @@ show_usage() {
 # Main installation flow
 main() {
     print_header
-    
-    # Check if running as root with warning
+
     if [[ $EUID -eq 0 ]]; then
         print_warning "Running as root. Tools will be installed system-wide."
     fi
-    
+
     detect_system
     check_dependencies
     determine_install_dir
     install_tools
     configure_path
-    
+
     if verify_installation; then
         show_usage
     else
@@ -431,5 +362,4 @@ main() {
     fi
 }
 
-# Run main function
 main "$@"
