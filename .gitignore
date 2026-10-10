@@ -32,3 +32,4 @@ Thumbs.db
 htmlcov/
 .tox/
 .hypothesis/
+merged.pdf

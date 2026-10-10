@@ -27,9 +27,6 @@ The project consists of:
 - **`scripts/dir_to_pdf.py`** - Selects files and renders the table of contents plus all files as one PDF
 - **`scripts/combine_to_txt.sh`** - Combines files into markdown-formatted text
 
-### Configuration
-- **`config/vimrc`** - Legacy Vim configuration (no longer used for PDF generation)
-
 ## Key Components
 
 ### code2pdf (`bin/code2pdf`)
@@ -60,11 +57,11 @@ The project consists of:
 - Verbose mode for debugging
 
 ### PDF Directory Processing (`scripts/print_all.sh` → `scripts/dir_to_pdf.py`)
-- `print_all.sh` keeps the original 11 positional arguments and `exec`s `dir_to_pdf.py`
+- `print_all.sh` takes the same positional arguments as `dir_to_pdf.py` (without OUTPUT: it writes ROOT/merged.pdf) and `exec`s it; a vimrc path in argument 2 (the pre-v3.8 form) is refused
 - JSON lists for blacklisted folders, whitelisted extensions and special file names; plus ignore-files, ignore-types, ignore-folders, include-types
-- Selection rules are identical to the old bash implementation (covered by `tests/test_dir_to_pdf.py`); hidden entries are skipped, symlink loops are cut by tracking real paths, and the output file is never included
+- Selection rules are covered by `tests/test_dir_to_pdf.py`; hidden entries are skipped, symlink loops are cut by tracking real paths, and the output file is never included
 - Files are ordered depth-first, sorted by name within each folder
-- Builds one HTML document — table of contents, then one `<section>` per file — and renders it with WeasyPrint once (about 4× faster than the old per-file PDFs + Ghostscript merge)
+- Builds one HTML document — table of contents, then one `<section>` per file — and renders it with WeasyPrint once
 - The table of contents uses `target-counter()` for real page numbers and links; file headings become PDF bookmarks and the page header (`string-set`)
 - `--list-files` prints the selection without rendering (useful for debugging filters)
 - Writes to a temp file next to `merged.pdf` and renames it into place
@@ -94,12 +91,7 @@ The project consists of:
 - Missing CJK fonts are detected before converting (`missing_cjk_fonts`: one `fc-list :charset=<probe>` per script that occurs: 中 3042 한) and reported with the fix, again after "Done:" so it doesn't scroll away; without such a font the PDF still extracts correct text but shows empty boxes, so text-based tests can't catch it
 - Code text prefers monospace CJK fonts (`CJK_MONO_FALLBACK`: Noto Sans Mono CJK first), titles use proportional ones
 - **Installation guide**: See `docs/font_installation_guide.md`
-- **Quick setup**: Run `./scripts/setup_cjk_fonts.sh [sc|tc|jp|kr|all]`
-
-**Migration from Vim to Python/Pygments**:
-- Old approach used Vim hardcopy with PostScript (poor UTF-8/CJK support)
-- New approach uses Python/Pygments for better UTF-8 support and 500+ languages
-- `config/vimrc` retained for reference only
+- **Quick setup**: Run `./scripts/setup_cjk_fonts.sh [sc|tc|hk|jp|kr]` (`all` is accepted and means `sc`)
 
 ## Development Commands
 
@@ -146,7 +138,6 @@ python3 scripts/code_to_pdf.py input.py output.pdf "relative/path.py"
 ```bash
 ./scripts/print_all.sh \
   path/to/directory \
-  config/vimrc \
   '["node_modules", ".git"]' \
   'env*' \
   '["js", "py", "ts"]' \
@@ -182,7 +173,7 @@ EOF
 ./scripts/setup_cjk_fonts.sh tc   # Traditional Chinese
 ./scripts/setup_cjk_fonts.sh jp   # Japanese
 ./scripts/setup_cjk_fonts.sh kr   # Korean
-./scripts/setup_cjk_fonts.sh all  # All CJK languages
+./scripts/setup_cjk_fonts.sh hk   # Hong Kong
 
 # See full guide
 cat docs/font_installation_guide.md
@@ -228,7 +219,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 - **Version** (`--version`/`-V`, `scripts/version.py`, stdlib only so it works on broken installs): `VERSION` holds `$Format:%(describe:tags)|%h|%cs$` and is marked `export-subst` in `.gitattributes`, so GitHub tarballs (Homebrew, install.sh) contain e.g. `v3.6-1-g1e724f3|1e724f3|2026-10-10` (verified on GitHub). `build-deb.sh` writes `v<VERSION>|<commit>|<date>` itself (CI checkouts have no tags); install.sh copies VERSION or, from a checkout, asks git; a checkout reads git directly. `v3.6-3-g…` shows as `3.6+3`, `-dirty` as `, uncommitted changes`, a bare hash as `unreleased`. The report also gives install kind (Homebrew / Debian package / install.sh [conda-forge] / git checkout), python + weasyprint/pygments/pypdf versions, and the CJK font fontconfig would use
 - **Compatibility notes** (found on Ubuntu): WeasyPrint < 62 ignores `calc()` in the code-line indent (use plain lengths); minimal Ubuntu has no `rev` or `file`; pypdf is optional (22.04 has none: big documents fall back to one pass)
 - **Release**: commit and push to `main`, push an annotated tag `vX.Y.Z` (this also builds and attaches the `.deb`), then in `homebrew-tap` update the formula's `url` and `sha256` (`curl -sL https://github.com/readbysearch/code2pdf/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256`), run `brew audit --strict --online readbysearch/tap/code2pdf`, and push. Details: `what_to_do_after_update_for_developer.md` in the tap repo.
-- The formula installs Pygments + WeasyPrint into its own virtualenv and sets `CODE2PDF_HOME`, so the scripts' plain `python3` must stay compatible with that.
+- The formula installs Pygments, WeasyPrint and pypdf into its own virtualenv and sets `CODE2PDF_HOME`, so the scripts' plain `python3` must stay compatible with that.
 
 ## File Processing Logic
 
@@ -268,7 +259,6 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 - No intermediate per-file PDFs and no `/tmp` work files; only a temp file next to the output, renamed into place
 - Page headers show paths relative to the converted directory
 - Debug output is sent to stderr to avoid interfering with normal operation
-- Filtering logic now matches code2txt for consistency
 
 ### code2txt
 - Language detection maps file extensions to markdown language identifiers
@@ -298,26 +288,26 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 - Check font availability: `fc-list | grep -i "noto.*cjk"`
 
 **Python dependency issues**:
-- Homebrew install: `brew reinstall readbysearch/tap/code2pdf` (bundles both packages)
+- Homebrew install: `brew reinstall readbysearch/tap/code2pdf` (bundles its Python packages)
 - Checkout: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` (Homebrew's Python rejects `pip install --user`)
 - WeasyPrint needs Pango: `brew install pango` / `apt install libpango-1.0-0 libpangoft2-1.0-0`
 
 ## Testing
 
 ### Test Suite Overview
-- **133 automated tests** covering both tools
+- **129 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
   - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
-  - code2pdf: 10 unit tests (`test_code2pdf.py`)
+  - code2pdf: 6 unit tests (`test_code2pdf.py`): help, usage errors, missing file/directory, `--dev` accepted
   - Launchers: 10 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies, `--theme`, `--list-themes`, default selection, `--jobs`
-  - Parts: 15 tests (`test_parts.py`): partitioning, joined output text-identical to single pass, contents links and bookmarks, headers/footers on every page, metadata, no leftovers
+  - Parts: 16 tests (`test_parts.py`): partitioning, joined output text-identical to single pass, contents links and bookmarks, headers/footers on every page, metadata, no leftovers
   - Directory conversion: 4 tests (`test_print_all_tmp.py`): `/tmp` isolation, missing directory
   - One-pass renderer: 12 tests (`test_dir_to_pdf.py`): filter parity with the old bash rules, table of contents first with correct page numbers, relative headers, no Ghostscript needed
   - Design: 17 tests (`test_design.py`): themes, embedded Plex fonts, `#!` language detection, git/mtime dates, printing date, grouped contents page, single-file design
   - Progress: 8 tests (`test_progress.py`): page estimate, terminal vs log output, ticking silent stages, time left, quiet
   - install.sh: 9 tests (`test_install_sh.py`): PATH detection (stock Ubuntu ~/.profile), latest-release selection and fallbacks
-  - Version: 17 tests (`test_version.py`): describe parsing, VERSION file vs placeholder vs git, install kind, launcher output, works without WeasyPrint
+  - Version: 16 tests (`test_version.py`): describe parsing, VERSION file vs placeholder vs git, install kind, launcher output, works without WeasyPrint
   - CJK fonts: 6 tests (`test_cjk_fonts.py`): missing-font detection per script with a fake `fc-list`, warning text
   - Integration: 8 tests (`test_integration.py`)
 - code2pdf tests need Pygments and WeasyPrint in `.venv/` (see Running Automated Tests); they skip or fail without them
@@ -326,7 +316,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 
 ### Test Categories
 1. **Functionality tests**: Command-line parsing, file filtering, output generation
-2. **Edge case tests**: Empty files, special characters, large files, symbolic links
+2. **Edge case tests**: special characters, empty directory, size limits, symbolic links
 3. **Performance tests**: Large repositories, many files
 4. **Integration tests**: Both tools on same data, consistency checks
 
@@ -347,7 +337,8 @@ bin/
 install.sh                      # Installer for Linux without Homebrew (private venv + symlinks)
 packaging/deb/                  # build-deb.sh, test-deb.sh, man pages for the Ubuntu/Debian package
 .github/workflows/release-deb.yml  # Builds, tests and attaches the .deb on every v* tag
-requirements.txt                # Runtime Python packages (pygments, weasyprint)
+requirements.txt                # Runtime Python packages (pygments, weasyprint, pypdf)
+VERSION                         # Filled in by git export-subst in tarballs (see --version)
 requirements-test.txt           # Test dependencies
 scripts/
   code_to_pdf.py                # Python script: source code → PDF (UTF-8 support)
@@ -358,12 +349,9 @@ scripts/
   parts.py                      # Render big documents in parts and join them
   dir_to_pdf.py                 # One-pass directory → PDF renderer with table of contents
   combine_to_txt.sh             # Text combination script
+  version.py                    # --version report (standard library only)
   setup_cjk_fonts.sh            # CJK font installation script
 fonts/                          # IBM Plex Mono/Sans TTFs + LICENSE-IBM-Plex.txt (OFL 1.1)
-config/
-  vimrc                         # Legacy Vim config (no longer used)
-  colors/
-    print_bw.vim                # Black & white color scheme
 tests/                          # Automated test suite
 docs/                           # Documentation
   font_installation_guide.md    # CJK font installation guide

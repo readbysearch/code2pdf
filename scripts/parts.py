@@ -274,7 +274,6 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
             writer.add_outline_item(rel, starts[i] - 1)
         writer.add_metadata({"/Title": title, "/Creator": "code2pdf", "/CreationDate": _pdf_date(printed_moment),
                              "/Producer": "WeasyPrint, pypdf"})
-        progress.writing_final()
         writer.write(output)
         _timing("write joined PDF", mark)
         if os.environ.get("CODE2PDF_DEBUG_TIMING"):

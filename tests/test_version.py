@@ -103,7 +103,6 @@ def test_version_works_without_pdf_dependencies(temp_dir):
     link.symlink_to(PROJECT_ROOT / "bin" / "code2pdf")
     fake_home = temp_dir / "home"
     shutil.copytree(PROJECT_ROOT / "scripts", fake_home / "scripts")
-    (fake_home / "config").mkdir()
     (fake_home / "VERSION").write_text("v3.6|abc1234|2026-10-11\n")
     env["CODE2PDF_HOME"] = str(fake_home)
     result = subprocess.run([str(link), "--version"], capture_output=True, text=True, env=env, timeout=60)

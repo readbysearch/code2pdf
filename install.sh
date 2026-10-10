@@ -342,7 +342,7 @@ install_tools() {
 
     print_info "Installing files..."
     $SUDO mkdir -p "$SHARE_DIR" "$INSTALL_DIR"
-    $SUDO cp -R "$SRC/bin" "$SRC/scripts" "$SRC/config" "$SRC/fonts" "$SRC/requirements.txt" "$SHARE_DIR/"
+    $SUDO cp -R "$SRC/bin" "$SRC/scripts" "$SRC/fonts" "$SRC/requirements.txt" "$SHARE_DIR/"
     # VERSION is filled in by GitHub tarballs (export-subst); for a local checkout, ask git
     if [[ -f "$SRC/VERSION" ]] && ! grep -q '\$Format' "$SRC/VERSION"; then
         $SUDO cp "$SRC/VERSION" "$SHARE_DIR/VERSION"

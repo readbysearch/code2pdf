@@ -121,9 +121,6 @@ class Progress:
             self.stage = "assembling"
             self._draw_silent_stage()
 
-    def writing_final(self):
-        pass  # joining and writing are one stage in parts mode
-
     def page(self, number, force=False):
         with self.lock:
             if number < self.last_page or (number == self.last_page and not force):  # repagination revisits pages

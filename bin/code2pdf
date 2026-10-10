@@ -20,7 +20,6 @@ resolve_install_dir() {
 get_install_dir() {
    INSTALL_DIR="${CODE2PDF_HOME:-$(resolve_install_dir)}"
    SCRIPTS_DIR="$INSTALL_DIR/scripts"
-   CONFIG_DIR="$INSTALL_DIR/config"
    if [ ! -f "$SCRIPTS_DIR/print_all.sh" ]; then
        echo "Error: code2pdf scripts not found in $SCRIPTS_DIR" >&2
        exit 1
@@ -184,8 +183,7 @@ main() {
            DEFAULT_WHITELIST_FILES='["README", "LICENSE", "Makefile", "launch.json"]'
            DEFAULT_INCLUDE_NO_EXTENSION='true'
            
-           # Pass comma-separated parameters directly (like code2txt does)
-           "$SCRIPTS_DIR/print_all.sh" "$1" "$CONFIG_DIR/vimrc" \
+           "$SCRIPTS_DIR/print_all.sh" "$1" \
                "$DEFAULT_BLACKLIST" \
                "$DEFAULT_BLACKLIST_PATTERN" \
                "$DEFAULT_WHITELIST_EXTENSIONS" \
@@ -197,14 +195,7 @@ main() {
                "$INCLUDE_TYPES" \
                ${LIST_FILES:+--list-files}
            ;;
-       -h|--help)
-           show_help
-           ;;
-       *)
-           show_help
-           exit 1
-           ;;
-   esac
+   esac  # -h and unknown options were handled by the first case
 }
 
 main "$@"

@@ -55,11 +55,10 @@ pytest --timeout=30
   - Language detection
   - Error handling
 
-- **test_code2pdf.py**: Unit tests for code2pdf functionality
-  - Dependency checking
-  - Single file conversion
-  - Directory conversion
-  - Error handling
+- **test_code2pdf.py**: code2pdf command line basics
+  - `--help`, unknown options, no arguments
+  - Missing file / missing directory errors
+  - `--dev` is still accepted (no-op)
 
 - **test_code2txt_output.py**: code2txt never reads its own output file
 
@@ -110,8 +109,8 @@ pytest --timeout=30
 
 The `fixtures/` directory contains sample files for testing:
 - **sample_project/**: A complete project with multiple file types
-- **edge_cases/**: Files for testing edge cases (empty files, special characters, large files)
-- **empty_dir/**: Empty directory for testing
+- **edge_cases/**: A file with special characters in its content
+- Empty directories and large files are created per test in a temporary directory (`empty_dir`, `create_large_file` in `conftest.py`)
 
 ## Notes
 

@@ -42,7 +42,7 @@ def page_count(pdf: Path) -> int:
 def run_print_all(project_root: Path, target: Path):
     script = project_root / "scripts" / "print_all.sh"
     cmd = [
-        "bash", str(script), str(target), str(project_root / "config" / "vimrc"),
+        "bash", str(script), str(target),
         '["node_modules", ".git", "dist", "out"]', "env*",
         '["py", "md"]', '["README"]', "true", "", "", "", "",
     ]

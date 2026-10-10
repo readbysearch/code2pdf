@@ -17,8 +17,8 @@ SHARE="$STAGE/usr/share/code2pdf"
 DOC="$STAGE/usr/share/doc/code2pdf"
 mkdir -p "$SHARE" "$STAGE/usr/bin" "$DOC" "$STAGE/DEBIAN"
 
-# Program files; the launchers find scripts/, config/ and fonts/ next to their real location
-cp -R "$SRC/bin" "$SRC/scripts" "$SRC/config" "$SRC/fonts" "$SHARE/"
+# Program files; the launchers find scripts/ and fonts/ next to their real location
+cp -R "$SRC/bin" "$SRC/scripts" "$SRC/fonts" "$SHARE/"
 find "$SHARE" -name '__pycache__' -prune -exec rm -rf {} +
 find "$SHARE" -type d -exec chmod 755 {} +
 find "$SHARE" -type f -exec chmod 644 {} +
