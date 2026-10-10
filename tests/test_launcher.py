@@ -21,10 +21,10 @@ def repo_venv_has_deps() -> bool:
 def isolated_path(tmp: Path) -> str:
     """A PATH with gs and jq but no brew and no python carrying pygments/weasyprint."""
     tools = tmp / "tools"
-    tools.mkdir()
+    tools.mkdir(exist_ok=True)
     for tool in ("gs", "jq"):
         found = shutil.which(tool)
-        if found:
+        if found and not (tools / tool).exists():
             (tools / tool).symlink_to(found)
     return f"{tools}:/usr/bin:/bin"
 
@@ -94,3 +94,31 @@ def test_code2pdf_reports_missing_scripts(temp_dir):
                  {"CODE2PDF_HOME": str(temp_dir / "nowhere")})
     assert result.returncode != 0
     assert "scripts" in (result.stdout + result.stderr).lower()
+
+
+@pytest.mark.skipif(not repo_venv_has_deps(), reason="repo .venv lacks pygments/weasyprint")
+def test_list_themes(linked_bin, temp_dir):
+    result = run([str(linked_bin / "code2pdf"), "--list-themes"], temp_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+    names = result.stdout.split()
+    assert names[:2] == ["paper", "mono"] and "monokai" in names
+
+
+@pytest.mark.skipif(not repo_venv_has_deps(), reason="repo .venv lacks pygments/weasyprint")
+def test_theme_option_for_both_modes(linked_bin, temp_dir):
+    (temp_dir / "proj").mkdir()
+    (temp_dir / "proj" / "a.py").write_text("x = 1\n")
+    single = run([str(linked_bin / "code2pdf"), "--theme", "mono", "-s", "proj/a.py"], temp_dir)
+    assert single.returncode == 0, single.stdout + single.stderr
+    assert (temp_dir / "a.pdf").exists()
+    whole = run([str(linked_bin / "code2pdf"), "-a", "proj", "--theme", "solarized-light"], temp_dir)
+    assert whole.returncode == 0, whole.stdout + whole.stderr
+    assert (temp_dir / "proj" / "merged.pdf").exists()
+
+
+@pytest.mark.skipif(not repo_venv_has_deps(), reason="repo .venv lacks pygments/weasyprint")
+def test_unknown_theme_is_reported(linked_bin, temp_dir):
+    (temp_dir / "a.py").write_text("x = 1\n")
+    result = run([str(linked_bin / "code2pdf"), "--theme", "nope", "-s", "a.py"], temp_dir)
+    assert result.returncode != 0
+    assert "unknown theme" in (result.stdout + result.stderr).lower()

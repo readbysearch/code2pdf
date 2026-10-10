@@ -47,6 +47,8 @@ show_help() {
    echo "  --ignore-folders LIST     Comma-separated list of folders to skip"
    echo "  --ignore-files LIST       Comma-separated list of specific files to ignore"
    echo "  --include-types LIST      Only include these file types (overrides default whitelist)"
+   echo "  --theme NAME              Colour theme: paper (default), mono (black & white), or any Pygments style"
+   echo "  --list-themes             List all theme names"
    echo "  -h, --help                Show this help message"
    echo ""
    echo "Examples:"
@@ -56,6 +58,7 @@ show_help() {
    echo "  code2pdf -a --ignore-types md,txt src/                       # Ignore file types"
    echo "  code2pdf -a --include-types js,ts src/                       # Only include JS/TS files"
    echo "  code2pdf -a --ignore-folders tests,docs src/                 # Skip folders"
+   echo "  code2pdf -a --theme mono src/                                # Black & white for printing"
 }
 
 # Check dependencies
@@ -102,6 +105,11 @@ main() {
                IGNORE_FILES="$2"
                shift 2
                ;;
+           --theme)
+               # Read by scripts/dir_to_pdf.py and scripts/code_to_pdf.py
+               export CODE2PDF_THEME="$2"
+               shift 2
+               ;;
            --ignore-types)
                IGNORE_TYPES="$2"
                shift 2
@@ -126,7 +134,7 @@ main() {
    set -- "${args[@]}"
    
    case "$1" in
-       -s|--single|-a|--all) ;;
+       -s|--single|-a|--all|--list-themes) ;;
        -h|--help) show_help; exit 0 ;;
        *) show_help; exit 1 ;;
    esac
@@ -135,6 +143,9 @@ main() {
    check_dependencies
    
    case "$1" in
+       --list-themes)
+           python3 "$SCRIPTS_DIR/theme.py" --list
+           ;;
        -s|--single)
            shift
            "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "$1" "$(pwd)"
