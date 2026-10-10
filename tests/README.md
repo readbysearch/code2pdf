@@ -79,6 +79,11 @@ pytest --timeout=30
   - Language detection from `#!` lines; dates from git, `uncommitted changes`, mtime outside git
   - Printing date (`SOURCE_DATE_EPOCH`), grouped contents page, single-file mode
 
+- **test_progress.py**: Progress display
+  - Page estimate (wrapped lines, one page per file, contents page)
+  - One updating line in a terminal, a line per 10% in logs, `--quiet`
+  - Elapsed time keeps ticking while WeasyPrint prepares and writes; time left includes writing
+
 - **test_print_all_tmp.py**: Directory conversion safety
   - Leaves unrelated files in `/tmp` alone; the PDF contains only its own pages
   - Leaves no work files behind

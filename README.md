@@ -114,6 +114,17 @@ into the directory you converted. The whole directory is rendered in one pass:
 
 Set `SOURCE_DATE_EPOCH` to fix the printing date for reproducible output.
 
+Large directories show their progress while converting (`-q` / `--quiet` turns it off):
+
+```
+code2pdf: 189 files, 41,005 lines (~873 pages)
+  [2/3] Laying out page 366 of ~873  [████████░░░░░░░░░░░░]  41%  0:25 elapsed, ~0:32 left
+Done: 873 pages in 0:59 → /path/to/project/merged.pdf
+```
+
+The page count is estimated up front from line counts and line lengths. In a terminal the
+status updates in place; in logs or pipes a line is printed every 10%.
+
 ## Fonts
 
 code2pdf bundles [IBM Plex](https://github.com/IBM/plex) Mono and Sans (in `fonts/`, SIL Open Font
