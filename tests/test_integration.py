@@ -1,6 +1,7 @@
 """Integration tests for code2pdf and code2txt tools."""
 
 import os
+import shutil
 from pathlib import Path
 import time
 import pytest
@@ -12,10 +13,14 @@ class TestIntegration:
     
     def test_both_tools_same_directory(self, code2txt_path, code2pdf_path, sample_project_dir, temp_dir):
         """Test running both tools on the same directory."""
+        # Work on a copy so merged.pdf is not written into the checked-in fixture
+        project = temp_dir / "sample_project"
+        shutil.copytree(sample_project_dir, project)
+
         # Run code2txt
         txt_output = temp_dir / "output.txt"
         txt_returncode, txt_stdout, txt_stderr = run_command(
-            [str(code2txt_path), "-o", str(txt_output), str(sample_project_dir)]
+            [str(code2txt_path), "-o", str(txt_output), str(project)]
         )
         
         assert txt_returncode == 0
@@ -23,7 +28,7 @@ class TestIntegration:
         
         # Run code2pdf (may fail without dependencies)
         pdf_returncode, pdf_stdout, pdf_stderr = run_command(
-            [str(code2pdf_path), "-a", str(sample_project_dir)],
+            [str(code2pdf_path), "-a", str(project)],
             timeout=60
         )
         

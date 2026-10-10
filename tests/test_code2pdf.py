@@ -1,6 +1,7 @@
 """Test suite for code2pdf tool."""
 
 import os
+import shutil
 from pathlib import Path
 import pytest
 from tests.conftest import run_command, create_test_files
@@ -59,16 +60,18 @@ class TestCode2pdf:
     )
     def test_directory_conversion(self, code2pdf_path, sample_project_dir, temp_dir):
         """Test directory PDF conversion."""
-        # Run code2pdf on directory
+        # Work on a copy so merged.pdf is not written into the checked-in fixture
+        project = temp_dir / "sample_project"
+        shutil.copytree(sample_project_dir, project)
         returncode, stdout, stderr = run_command(
-            [str(code2pdf_path), "-a", str(sample_project_dir)],
+            [str(code2pdf_path), "-a", str(project)],
             cwd=temp_dir
         )
         
         # Check execution
         if returncode == 0:
             # Check for merged.pdf
-            merged_pdf = sample_project_dir / "merged.pdf"
+            merged_pdf = project / "merged.pdf"
             assert merged_pdf.exists() or "PDF created" in stderr
         else:
             # If it failed, it should be due to missing dependencies or brew not found
