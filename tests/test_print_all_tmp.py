@@ -21,7 +21,7 @@ def python_env() -> dict:
 
 
 def has_pdf_deps() -> bool:
-    if not shutil.which("gs") or not shutil.which("jq"):
+    if not shutil.which("gs"):  # only the tests use gs (to count pages); code2pdf itself no longer does
         return False
     result = subprocess.run(
         ["python3", "-c", "import pygments, weasyprint"],
@@ -50,7 +50,7 @@ def run_print_all(project_root: Path, target: Path):
     return proc.returncode, proc.stdout, proc.stderr
 
 
-@pytest.mark.skipif(not has_pdf_deps(), reason="gs, jq, pygments or weasyprint not available")
+@pytest.mark.skipif(not has_pdf_deps(), reason="gs, pygments or weasyprint not available")
 class TestPrintAllTmpIsolation:
     """print_all.sh used to `rm /tmp/*.pdf` and merge every PDF in /tmp."""
 

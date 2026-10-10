@@ -338,7 +338,13 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
     out_dir = os.path.dirname(os.path.abspath(output))
     estimates = [progress_report.estimate_pages([sources[path]]) for _, path in entries]
     import parts as parts_mode
-    if contents and root is not None and sum(estimates) > 2 * parts_mode.part_pages():
+    big = contents and root is not None and sum(estimates) > 2 * parts_mode.part_pages()
+    if big and not parts_mode.available():
+        if not quiet:
+            print("  (pypdf is not installed, so this big document is rendered in one pass; "
+                  "install pypdf to use less memory)", file=sys.stderr)
+        big = False
+    if big:
         fd, tmp = tempfile.mkstemp(prefix=".code2pdf-", suffix=".pdf", dir=out_dir)
         os.close(fd)
         try:

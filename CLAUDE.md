@@ -219,7 +219,10 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 
 - **Users**: `brew install readbysearch/tap/code2pdf` (formula in [readbysearch/homebrew-tap](https://github.com/readbysearch/homebrew-tap)), or `install.sh` on Linux without Homebrew.
 - **Canonical repository**: `readbysearch/code2pdf` (the old `waleking/code2pdf` fork is archived).
-- **Release**: commit and push to `main`, push an annotated tag `vX.Y.Z`, then in `homebrew-tap` update the formula's `url` and `sha256` (`curl -sL https://github.com/readbysearch/code2pdf/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256`), run `brew audit --strict --online readbysearch/tap/code2pdf`, and push. Details: `what_to_do_after_update_for_developer.md` in the tap repo.
+- **Ubuntu/Debian**: `packaging/deb/build-deb.sh VERSION [DIR]` builds `code2pdf_VERSION_all.deb` (files in `/usr/share/code2pdf`, symlinks in `/usr/bin`, man pages from `packaging/deb/man/`); it depends on Ubuntu's `weasyprint (>= 61)`, `python3-pygments`, recommends `python3-pypdf`, `fonts-noto-cjk`. `packaging/deb/test-deb.sh DEB` installs/uses/removes it in a fresh container. `.github/workflows/release-deb.yml` runs on every `v*` tag: build + `lintian --fail-on warning`, unit tests and install test on Ubuntu 24.04 and 26.04 containers, then attaches `code2pdf_X_all.deb` and `code2pdf_all.deb` (stable `releases/latest/download/` name) to the GitHub release
+- **No-sudo installs** (`install.sh --user`): system `python3 -m venv` if `ensurepip` exists, else `venv --without-pip` + `get-pip.py`; if WeasyPrint still can't load (no Pango) or there is no python3, download micromamba (`mamba-org/micromamba-releases`) and create `venv/` from conda-forge (`python pygments weasyprint pypdf`, ~400 MB); `--conda` forces it. The launcher just uses `venv/bin/python3`. Tested as a non-root user on Ubuntu 24.04 with: no python3-venv (~100 MB), no Pango (conda), no Python (conda), everything
+- **Compatibility notes** (found on Ubuntu): WeasyPrint < 62 ignores `calc()` in the code-line indent (use plain lengths); minimal Ubuntu has no `rev` or `file`; pypdf is optional (22.04 has none: big documents fall back to one pass)
+- **Release**: commit and push to `main`, push an annotated tag `vX.Y.Z` (this also builds and attaches the `.deb`), then in `homebrew-tap` update the formula's `url` and `sha256` (`curl -sL https://github.com/readbysearch/code2pdf/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256`), run `brew audit --strict --online readbysearch/tap/code2pdf`, and push. Details: `what_to_do_after_update_for_developer.md` in the tap repo.
 - The formula installs Pygments + WeasyPrint into its own virtualenv and sets `CODE2PDF_HOME`, so the scripts' plain `python3` must stay compatible with that.
 
 ## File Processing Logic
@@ -334,6 +337,8 @@ bin/
   code2pdf                      # Main PDF CLI entry point
   code2txt                      # Main text CLI entry point
 install.sh                      # Installer for Linux without Homebrew (private venv + symlinks)
+packaging/deb/                  # build-deb.sh, test-deb.sh, man pages for the Ubuntu/Debian package
+.github/workflows/release-deb.yml  # Builds, tests and attaches the .deb on every v* tag
 requirements.txt                # Runtime Python packages (pygments, weasyprint)
 requirements-test.txt           # Test dependencies
 scripts/

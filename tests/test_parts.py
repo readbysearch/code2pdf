@@ -159,3 +159,17 @@ def test_metadata_matches_single_pass_creator(project, temp_dir):
     from pypdf import PdfReader
     convert(project, temp_dir / "joined.pdf", part_pages=2)
     assert PdfReader(str(temp_dir / "joined.pdf")).metadata.get("/Creator") == "code2pdf"
+
+
+def test_without_pypdf_big_documents_fall_back_to_one_pass(project, temp_dir):
+    """pypdf is optional (Ubuntu 22.04 has none): without it, render in one pass instead of failing."""
+    out = temp_dir / "fallback.pdf"
+    env = dict(os.environ, SOURCE_DATE_EPOCH=FIXED_EPOCH, TZ="UTC", CODE2PDF_PART_PAGES="2")
+    code = ("import sys, runpy; sys.modules['pypdf'] = None; "
+            f"sys.argv = ['dir_to_pdf.py', {str(project)!r}, {str(out)!r}, '[]', 'env*', '[\"py\", \"md\", \"sh\"]', "
+            "'[]', 'true', '', '', '', '']; "
+            f"sys.path.insert(0, {str(SCRIPTS)!r}); runpy.run_path({str(SCRIPTS / 'dir_to_pdf.py')!r}, run_name='__main__')")
+    result = subprocess.run([PYTHON, "-c", code], capture_output=True, text=True, timeout=300, env=env)
+    assert result.returncode == 0, result.stderr
+    assert "pypdf" in result.stderr and "one pass" in result.stderr
+    assert out.read_bytes().startswith(b"%PDF-")

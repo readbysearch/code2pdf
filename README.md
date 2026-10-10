@@ -32,7 +32,19 @@ brew install readbysearch/tap/code2pdf
 Installs both `code2pdf` and `code2txt` with everything they need (Python, Pygments,
 WeasyPrint, Pango) in a private environment — no `pip install` required.
 
-### Install script (Linux without Homebrew)
+### Ubuntu 24.04+ / Debian 13+ (.deb)
+
+```bash
+curl -LO https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf_all.deb
+sudo apt install ./code2pdf_all.deb
+```
+
+`apt` installs the dependencies from Ubuntu itself (`weasyprint`, `python3-pygments`, and the
+recommended `python3-pypdf` and `fonts-noto-cjk`), so they get Ubuntu's security updates. The
+package is ~300 KB, works on any CPU, and includes `man code2pdf` / `man code2txt`. Remove it with
+`sudo apt remove code2pdf`. Each release also has a versioned file, e.g. `code2pdf_3.6_all.deb`.
+
+### Install script (other Linux without Homebrew)
 
 Install the system packages first, then run the script:
 
@@ -50,9 +62,14 @@ curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.s
 ```
 
 The script copies the tools to `~/.local/share/code2pdf` (or `/usr/local/share/code2pdf`),
-creates a private Python environment there with Pygments and WeasyPrint, links the commands
-into `~/.local/bin` (or `/usr/local/bin`), and verifies the install by converting a test file.
-Re-run it to upgrade; `--ref v3.3` installs a specific release.
+creates a private Python environment there with Pygments, WeasyPrint and pypdf, links the
+commands into `~/.local/bin` (or `/usr/local/bin`), and verifies the install by converting a
+test file. Re-run it to upgrade; `--ref v3.6` installs a specific release.
+
+**No sudo?** `--user` needs no root at all. If `python3-venv` is missing it bootstraps pip
+itself (~100 MB). If the Pango library or Python is missing, it downloads
+[micromamba](https://mamba.readthedocs.io/) and builds the environment from conda-forge, which
+brings its own Python, WeasyPrint and Pango (~400 MB); `--conda` forces this.
 
 ### From a checkout (development)
 

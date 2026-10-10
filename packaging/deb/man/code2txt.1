@@ -1,0 +1,43 @@
+.TH CODE2TXT 1 "2026" "code2pdf" "User Commands"
+.SH NAME
+code2txt \- combine source files into one Markdown text file
+.SH SYNOPSIS
+.B code2txt
+[\fIOPTIONS\fR] [\fIDIR\fR]
+.SH DESCRIPTION
+.B code2txt
+writes every selected file under
+.I DIR
+(default: the current directory) into one Markdown file with a table of contents and
+fenced code blocks, for use as LLM context.
+.SH OPTIONS
+.TP
+.BI "\-o, \-\-output " FILE
+Output file (default
+.IR combined.txt ).
+.TP
+.BI \-\-include\-types " LIST"
+Only include these comma-separated extensions.
+.TP
+.BI \-\-ignore\-types " LIST"
+Skip these extensions.
+.TP
+.BI \-\-ignore\-folders " LIST"
+Skip these folder names.
+.TP
+.BI \-\-ignore\-files " LIST"
+Skip these file names.
+.TP
+.BI \-\-max\-file\-size " SIZE"
+Skip larger files, e.g. 500K or 1M (default 500K).
+.TP
+.B \-\-no\-toc
+No table of contents.
+.TP
+.B \-\-verbose
+Show processing details.
+.TP
+.B "\-h, \-\-help"
+Show help.
+.SH SEE ALSO
+.BR code2pdf (1)

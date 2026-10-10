@@ -28,6 +28,15 @@ def _timing(label, started):
     return time.monotonic()
 
 
+def available():
+    """Parts mode needs pypdf to join the parts; it is optional (e.g. Ubuntu 22.04 has no package)."""
+    try:
+        import pypdf  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def part_pages():
     return int(os.environ.get("CODE2PDF_PART_PAGES") or PART_PAGES)
 
@@ -248,7 +257,8 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
             raise RuntimeError(f"page count mismatch: overlay {len(overlay.pages)}, document {len(writer.pages)}, expected {total}")
         mark = _timing("append parts", mark)
         for page, stamp in zip(writer.pages, overlay.pages):
-            page.merge_page(stamp)
+            # Underneath, like WeasyPrint draws margin boxes, so text extraction order matches a single pass
+            page.merge_page(stamp, over=False)
             page.compress_content_streams()  # merge_page writes the combined stream uncompressed (~6x size)
         mark = _timing("stamp overlay", mark)
 
