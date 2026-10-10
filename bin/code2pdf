@@ -63,7 +63,7 @@ check_dependencies() {
    local missing=()
 
    # Check for command-line tools
-   for cmd in python3 gs jq; do
+   for cmd in python3; do
        if ! command -v $cmd &> /dev/null; then
            missing+=($cmd)
        fi
@@ -81,7 +81,7 @@ check_dependencies() {
 
    if [ ${#missing[@]} -ne 0 ]; then
        echo "Error: Missing required dependencies: ${missing[*]}" >&2
-       echo "Please install them (e.g. brew install python3 ghostscript jq, or apt install python3-venv ghostscript jq)" >&2
+       echo "Please install them (e.g. brew install python3, or apt install python3-venv)" >&2
        exit 1
    fi
 }
