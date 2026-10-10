@@ -1,0 +1,81 @@
+# On every version tag: build the .deb, test it on fresh Ubuntu 24.04 and 26.04 (unit tests with
+# Ubuntu's own packages, then install/use/remove), and attach it to the GitHub release.
+name: Release .deb
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, e.g. 3.6 (no upload unless the tag v<version> exists)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          echo "version=${v#v}" >> "$GITHUB_OUTPUT"
+      - run: bash packaging/deb/build-deb.sh "${{ steps.version.outputs.version }}" dist
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq lintian && lintian --fail-on warning dist/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ["24.04", "26.04"]
+    container: ubuntu:${{ matrix.ubuntu }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb
+          path: dist
+      - name: Unit tests with Ubuntu's packages
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3 weasyprint python3-pygments python3-pypdf \
+            fonts-noto-cjk python3-pytest poppler-utils ghostscript git ca-certificates >/dev/null
+          git config --global init.defaultBranch main
+          python3 -m pytest -q -p no:cacheprovider
+      - name: Install, use and remove the .deb on a clean system
+        run: |
+          apt-get remove -y -qq weasyprint python3-pygments python3-pypdf >/dev/null && apt-get autoremove -y -qq >/dev/null
+          bash packaging/deb/test-deb.sh "$(ls dist/code2pdf_*_all.deb)"
+
+  release:
+    needs: [build, test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb
+          path: dist
+      - name: Attach to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cp dist/code2pdf_*_all.deb dist/code2pdf_all.deb   # stable name for releases/latest/download/
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber dist/code2pdf_*_all.deb dist/code2pdf_all.deb
