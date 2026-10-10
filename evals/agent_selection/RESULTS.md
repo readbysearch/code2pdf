@@ -32,6 +32,35 @@ cases; n is the number of runs.
    command timeout before converting (the default is 2 minutes). The longest render, Alamofire
    at 7,697 pages, took about 6 minutes.
 
+## Topic requests ("the code that handles sessions")
+
+Five judgement cases ask by topic: Flask sessions, gin middleware, gin JSON rendering, Express
+routing, Alamofire retries. They are still graded programmatically. Each has a required set
+backed by the code (Flask opens the session in `ctx.py` and saves it in `app.py`) and a set of
+acceptable extras; anything else fails.
+
+| | Haiku | Sonnet | Opus (high effort) |
+|---|---|---|---|
+| first wording | 40% | 40% | 80% |
+| reworded, "whole files, as they are" | 87% | 87% | 100% |
+| after fixing two gaps in the acceptable sets | **100%** | **100%** | **100%** |
+
+None of the failures were the agents' fault:
+- **Excerpts.** Asked for "the gin.Context methods that use them", Haiku and Sonnet cut the
+  methods into new files with made-up names (`context_json.go`, `02_ctx_request_context.py`).
+  That is a reasonable reading, so the requests now say "whole files".
+- **Acceptable sets too narrow.** Opus included `ginS/gins.go`, whose `ginS.Use` also registers
+  middleware. Haiku included `DataRequest`/`DownloadRequest`/`UploadRequest`, which do ask the
+  Session for a retry. Both were right, and both are now acceptable.
+- **`__pycache__`.** Agents that imported Flask to inspect it wrote `__pycache__/*.pyc` into the
+  project. That is gitignored and harmless, so the grader now ignores bytecode caches (and only
+  those).
+
+**Product finding:** people and agents want to print *part* of a file. With no way to do it,
+13 of the 40 first-wording runs made excerpt files, which loses the real path and the real
+line numbers. A `path:START-END` form for `--files-from` (printed with its real path and line
+numbers) would cover it. That is a design decision, so it's proposed, not built.
+
 ## Hillclimbing code2txt
 
 code2txt was the part of the solution without the 3.9 options, so it had room to climb. It was

@@ -8,7 +8,7 @@ The design follows [Automating eval design and hillclimbing](https://claude.dev/
 
 ## Cases
 
-Three sets, 44 cases in all (`--set fixtures|real|scale`):
+Four sets, 49 cases in all (`--set fixtures|real|scale|judgement`):
 
 - **fixtures** (`cases.py`, `projects.py`): 27 requests over four small projects built fresh
   for every run: a Flask + React monorepo (`shop`), a SwiftUI app (`orbit`), a Python research
@@ -19,6 +19,8 @@ Three sets, 44 cases in all (`--set fixtures|real|scale`):
   v1.0.0, Alamofire 5.9.1, gin v1.10.0, Express 4.21.0, Flask 3.0.3 (one case commits 3.0.2
   first and asks for the release diff). Tarballs are cached in `~/.cache/code2pdf-evals` and
   never executed. Expected files are computed from the tree by the rule the request states.
+- **judgement** (`real_cases.JUDGEMENT_CASES`): 5 requests by topic ("the code that implements
+  sessions"). A required set backed by the code plus `allowed` extras; anything else fails.
 - **scale** (`real_cases.SCALE_CASES`): 2 whole-repository prints (Alamofire, ~7,700 pages in
   ~6 minutes; Gymnasium plus its `envs/`) that outlast an agent's 2-minute default command
   timeout. They run one at a time with code2pdf's normal parallelism.
@@ -49,7 +51,8 @@ Three sets, 44 cases in all (`--set fixtures|real|scale`):
 Programmatic, no LLM judge. The PDF's bookmarks (one per file, labelled with its path) must
 equal the expected files. The order counts when the request gives one, and a `-a backend`
 style folder prefix is allowed. The PDF must be at the requested path, and the project
-must be unchanged byte for byte (`.git` aside).
+must be unchanged byte for byte (`.git` and Python bytecode caches aside). `report` re-grades
+stored runs with the current grader, so grader fixes apply to old runs too.
 
 ## Subjects
 

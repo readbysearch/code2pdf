@@ -145,6 +145,72 @@ SCALE_CASES = [
          source="production: whole-repository prints", reference="code2pdf -a . --include gymnasium/envs -o {out}"),
 ]
 
+# Judgement: requests by topic ("the code that handles sessions"), as people often ask. The
+# requests say "whole files": asked for "the methods that ...", Haiku and Sonnet cut excerpts
+# into new files with made-up names, a reasonable reading that the first wording left open.
+# `expected` is what must be in the PDF; `allowed` are defensible extras; anything else fails.
+# Each required file is backed by the code (noted in why_hard), so experts would agree.
+JUDGEMENT_CASES = [
+    dict(id="flask-sessions", project="flask",
+         request="From the flask package (src/flask), print the code that implements sessions: the "
+                 "session classes and interface, plus the files where Flask opens and saves the "
+                 "session during a request. Whole files, as they are; no tests, no docs.",
+         expected=lambda r: ["src/flask/sessions.py", "src/flask/ctx.py", "src/flask/app.py"],
+         allowed=["src/flask/json/tag.py", "src/flask/sansio/app.py", "src/flask/globals.py",
+                  "src/flask/testing.py", "src/flask/helpers.py", "src/flask/__init__.py",
+                  "src/flask/templating.py"],
+         why_hard="Needs reading code: ctx.py opens the session (RequestContext.push), app.py saves "
+                  "it (process_response); 12 files mention sessions.",
+         source="hand-written (topic request)",
+         reference="printf 'src/flask/sessions.py\nsrc/flask/ctx.py\nsrc/flask/app.py\n' | code2pdf --files-from - -o {out}"),
+    dict(id="gin-middleware", project="gin",
+         request="Print gin's built-in middleware (the logger and the panic recovery) and the code "
+                 "that registers middleware (the files with the Use functions). Whole files, as they are; "
+                 "no tests.",
+         expected=lambda r: ["logger.go", "recovery.go", "gin.go", "routergroup.go"],
+         allowed=["context.go", "ginS/gins.go"],
+         why_hard="Use is defined twice: Engine.Use in gin.go and RouterGroup.Use in routergroup.go "
+                  "(ginS.Use wraps them; Opus found it, so it is allowed).",
+         source="hand-written (topic request)",
+         reference="printf 'logger.go\nrecovery.go\ngin.go\nroutergroup.go\n' | code2pdf --files-from - -o {out}"),
+    dict(id="gin-json-render", project="gin",
+         request="Print the code that renders JSON responses in gin: the JSON renderers and the "
+                 "files with the gin.Context methods that use them. Whole files, as they are; no tests.",
+         expected=lambda r: ["render/json.go", "context.go"],
+         allowed=["render/render.go", "internal/json/json.go", "internal/json/go_json.go",
+                  "internal/json/jsoniter.go", "internal/json/sonic.go"],
+         why_hard="All JSON variants (JSONP, SecureJSON, AsciiJSON, PureJSON) live in one file; the "
+                  "other renderers (XML, YAML, HTML, ...) must stay out.",
+         source="hand-written (topic request)",
+         reference="printf 'render/json.go\ncontext.go\n' | code2pdf --files-from - -o {out}"),
+    dict(id="express-routing", project="express",
+         request="Print Express's routing implementation from lib/ (the router, its routes and "
+                 "layers) and the application file that sets the router up. Whole files, as they are; "
+                 "no tests or examples.",
+         expected=lambda r: ["lib/router/index.js", "lib/router/route.js", "lib/router/layer.js",
+                             "lib/application.js"],
+         allowed=["lib/express.js", "lib/middleware/init.js", "lib/middleware/query.js"],
+         why_hard="request.js, response.js, view.js and utils.js are next to it and not routing.",
+         source="hand-written (topic request)",
+         reference="ls lib/router/*.js lib/application.js | code2pdf --files-from - -o {out}"),
+    dict(id="alamo-retry", project="alamofire",
+         request="Print the Alamofire source that decides whether and when a failed request is "
+                 "retried: the retrier protocol, the built-in retry policy, and where Session asks "
+                 "for a retry. Whole files, as they are; Source/ only.",
+         expected=lambda r: ["Source/Features/RequestInterceptor.swift", "Source/Features/RetryPolicy.swift",
+                             "Source/Core/Session.swift"],
+         allowed=["Source/Features/AuthenticationInterceptor.swift", "Source/Core/AFError.swift",
+                  "Source/Core/Request.swift",
+                  # these ask the Session for a retry when response serialization fails (Haiku found it)
+                  "Source/Core/DataRequest.swift", "Source/Core/DownloadRequest.swift",
+                  "Source/Core/UploadRequest.swift"],
+         why_hard="RequestRetrier is declared in RequestInterceptor.swift, not a file named after it; "
+                  "Session.retryResult asks the retrier.",
+         source="hand-written (topic request)",
+         reference="printf 'Source/Features/RequestInterceptor.swift\nSource/Features/RetryPolicy.swift\n"
+                   "Source/Core/Session.swift\n' | code2pdf --files-from - -o {out}"),
+]
+
 REAL_CASES = [
     dict(id="gym-package", project="gymnasium",
          request="Print the gymnasium package (the gymnasium/ folder): every Python file in it.",
