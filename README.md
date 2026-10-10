@@ -27,13 +27,13 @@ Install both tools with a single command:
 
 ```bash
 # Install for current user (no sudo required)
-curl -sSL https://raw.githubusercontent.com/waleking/code2pdf/main/install.sh | bash -s -- --user
+curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --user
 
 # Or install system-wide (requires sudo)
-curl -sSL https://raw.githubusercontent.com/waleking/code2pdf/main/install.sh | bash -s -- --system
+curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --system
 
 # Interactive installation (choose user/system during install)
-curl -sSL https://raw.githubusercontent.com/waleking/code2pdf/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash
 ```
 
 **Install Script Features:**
@@ -43,12 +43,15 @@ curl -sSL https://raw.githubusercontent.com/waleking/code2pdf/main/install.sh | 
 - ✅ Automatic PATH configuration
 - ✅ Works on Ubuntu, CentOS, Fedora, RHEL, etc.
 
-### Via Homebrew (macOS users)
+### Via Homebrew (macOS and Linux)
 
 ```bash
-brew tap readbysearch/code2pdf
-brew install code2pdf
+brew install readbysearch/code2pdf/code2pdf
 ```
+
+Installs both `code2pdf` and `code2txt` with everything they need (Python, Pygments,
+WeasyPrint, Pango, Ghostscript, jq) in a private environment — no `pip install` required.
+On macOS, Chinese/Japanese/Korean text renders with the system fonts.
 
 ### Manual Installation
 
