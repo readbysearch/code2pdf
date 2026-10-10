@@ -30,6 +30,12 @@ for cmd in code2pdf code2txt; do
     ln -s "../share/code2pdf/bin/$cmd" "$STAGE/usr/bin/$cmd"
 done
 
+# For `code2pdf --version`: release from the argument, commit and date from git when available
+COMMIT="$(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || true)"
+COMMIT_DATE="$(git -C "$SRC" log -1 --format=%cs 2>/dev/null || true)"
+echo "v${VERSION}|${COMMIT}|${COMMIT_DATE}" > "$SHARE/VERSION"
+chmod 644 "$SHARE/VERSION"
+
 # Documentation and manual pages
 cp "$SRC/README.md" "$DOC/README.md"
 mkdir -p "$STAGE/usr/share/man/man1"

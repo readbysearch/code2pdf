@@ -29,6 +29,8 @@ su tester -s /bin/bash -c '
 
     # capture first: with pipefail, `cmd | grep -q` fails when grep exits early (SIGPIPE)
     help=$(code2pdf --help); [[ "$help" == *"Usage: code2pdf"* ]]
+    version=$(code2pdf --version); expected="code2pdf $(dpkg-query -W -f="\${Version}" code2pdf)"
+    [[ "$version" == "$expected"* && "$version" == *"installed: Debian package"* ]] || { echo "bad --version: $version"; exit 1; }
     themes=$(code2pdf --list-themes); [[ "$themes" == paper$'"'"'\n'"'"'mono* ]]
     code2pdf -a demo --list-files > files.txt
     grep -q "src/m1.py" files.txt && ! grep -q build/ files.txt

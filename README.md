@@ -125,6 +125,16 @@ hidden folders, `node_modules`, `build`, `dist`, `out`, `target`, `DerivedData`,
 `__pycache__`, `venv` and `env*`. Adjust with `--include-types`, `--ignore-types`,
 `--ignore-folders` and `--ignore-files`.
 
+Show the version, how it was installed, and the libraries it uses (handy when reporting a problem):
+```bash
+$ code2pdf --version
+code2pdf 3.7 (commit 1e724f3, 2026-10-11)
+  installed: Homebrew, /opt/homebrew/Cellar/code2pdf/3.7
+  python 3.14.8, weasyprint 70.0, pygments 2.21.0, pypdf 6.20.0
+  CJK font: PingFang SC
+```
+`3.7+2` means two commits after release 3.7. `--version` works even when WeasyPrint is missing.
+
 Show help:
 ```bash
 code2pdf --help
