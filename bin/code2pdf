@@ -50,6 +50,7 @@ show_help() {
    echo "  --theme NAME              Colour theme: paper (default), mono (black & white), or any Pygments style"
    echo "  --list-themes             List all theme names"
    echo "  -q, --quiet               No progress output"
+   echo "  --list-files              With -a: list the files that would be included, without converting"
    echo "  -h, --help                Show this help message"
    echo ""
    echo "Examples:"
@@ -115,6 +116,10 @@ main() {
                export CODE2PDF_QUIET=1
                shift
                ;;
+           --list-files)
+               LIST_FILES=1
+               shift
+               ;;
            --ignore-types)
                IGNORE_TYPES="$2"
                shift 2
@@ -157,9 +162,10 @@ main() {
            ;;
        -a|--all)
            shift
-           DEFAULT_BLACKLIST='["node_modules", ".git", "dist", "out"]'
+           # Build output, dependency caches and virtualenvs are skipped (hidden folders always are)
+           DEFAULT_BLACKLIST='["node_modules", ".git", "dist", "out", "build", "target", "DerivedData", "Pods", "vendor", "__pycache__", "venv"]'
            DEFAULT_BLACKLIST_PATTERN='env*'
-           DEFAULT_WHITELIST_EXTENSIONS='["rb", "sh", "md", "js", "py", "ts", "java", "cpp", "h", "c", "html"]'
+           DEFAULT_WHITELIST_EXTENSIONS='["c", "h", "cc", "cpp", "cxx", "hh", "hpp", "m", "mm", "swift", "go", "rs", "zig", "java", "kt", "kts", "scala", "groovy", "gradle", "cs", "fs", "py", "rb", "php", "pl", "lua", "r", "jl", "dart", "ex", "exs", "erl", "hs", "ml", "clj", "js", "mjs", "cjs", "jsx", "ts", "tsx", "vue", "svelte", "html", "css", "scss", "sql", "proto", "graphql", "sh", "bash", "zsh", "fish", "ps1", "md", "rst", "yaml", "yml", "toml"]'
            DEFAULT_WHITELIST_FILES='["README", "LICENSE", "Makefile", "launch.json"]'
            DEFAULT_INCLUDE_NO_EXTENSION='true'
            
@@ -173,7 +179,8 @@ main() {
                "$IGNORE_FILES" \
                "$IGNORE_TYPES" \
                "$IGNORE_FOLDERS" \
-               "$INCLUDE_TYPES"
+               "$INCLUDE_TYPES" \
+               ${LIST_FILES:+--list-files}
            ;;
        -h|--help)
            show_help

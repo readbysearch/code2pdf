@@ -96,6 +96,18 @@ code2pdf -a src/ --theme solarized-light  # any Pygments theme for the code
 code2pdf --list-themes                    # every theme name
 ```
 
+See which files `-a` would include, without converting:
+```bash
+code2pdf -a . --list-files
+```
+
+By default `-a` includes source files of common languages (C/C++/Objective-C, Swift, Go, Rust,
+Java/Kotlin, C#, Python, Ruby, JavaScript/TypeScript, shell, SQL, …), Markdown, YAML and TOML,
+plus `README`, `LICENSE`, `Makefile` and files without an extension such as `Dockerfile`. It skips
+hidden folders, `node_modules`, `build`, `dist`, `out`, `target`, `DerivedData`, `Pods`, `vendor`,
+`__pycache__`, `venv` and `env*`. Adjust with `--include-types`, `--ignore-types`,
+`--ignore-folders` and `--ignore-files`.
+
 Show help:
 ```bash
 code2pdf --help
