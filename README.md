@@ -28,7 +28,7 @@ brew install readbysearch/tap/code2pdf
 ```
 
 Installs both `code2pdf` and `code2txt` with everything they need (Python, Pygments,
-WeasyPrint, Pango, Ghostscript, jq) in a private environment — no `pip install` required.
+WeasyPrint, Pango) in a private environment — no `pip install` required.
 
 ### Install script (Linux without Homebrew)
 
@@ -36,9 +36,9 @@ Install the system packages first, then run the script:
 
 ```bash
 # Ubuntu/Debian
-sudo apt install curl python3-venv ghostscript jq libpango-1.0-0 libpangoft2-1.0-0 fonts-noto-cjk
+sudo apt install curl python3-venv libpango-1.0-0 libpangoft2-1.0-0 fonts-noto-cjk
 # Fedora/RHEL
-sudo dnf install curl python3 ghostscript jq pango google-noto-sans-cjk-fonts
+sudo dnf install curl python3 pango google-noto-sans-cjk-fonts
 
 # Install for current user (~/.local, no sudo)
 curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --user
@@ -59,7 +59,7 @@ git clone https://github.com/readbysearch/code2pdf.git
 cd code2pdf
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt   # pygments, weasyprint
-# also needed: ghostscript and jq (brew install ghostscript jq / apt install ghostscript jq)
+# WeasyPrint also needs Pango (brew install pango / apt install libpango-1.0-0 libpangoft2-1.0-0)
 
 ./bin/code2pdf -s myfile.py   # uses ./scripts and ./.venv automatically
 ```
@@ -92,7 +92,8 @@ code2pdf --help
 ```
 
 Output: `-s` writes `<name>.pdf` to the current directory; `-a` writes `merged.pdf`
-(table of contents first) into the directory you converted.
+into the directory you converted: a clickable table of contents with page numbers,
+then every file, with PDF bookmarks per file. The whole directory is rendered in one pass.
 
 ## CJK Font Support
 

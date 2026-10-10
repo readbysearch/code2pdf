@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This repository contains two command-line tools:
-- **code2pdf**: Converts source code files to PDF format with syntax highlighting and table of contents. Uses Python/Pygments for syntax highlighting with full UTF-8 and CJK support, and Ghostscript for PDF operations.
+- **code2pdf**: Converts source code files to PDF format with syntax highlighting and table of contents. Uses Python/Pygments for syntax highlighting with full UTF-8 and CJK support, and WeasyPrint to render a whole directory as one PDF in a single pass.
 - **code2txt**: Combines source code files into a single markdown-formatted text file optimized for LLM context input, with table of contents and syntax highlighting.
 
 ## Architecture
@@ -19,7 +19,8 @@ The project consists of:
 ### Processing Scripts
 - **`scripts/code_to_pdf.py`** - Python script for converting source code to PDF with UTF-8/CJK support
 - **`scripts/print_single_file_to_pdf.sh`** - Converts individual files to PDF using Python script
-- **`scripts/print_all.sh`** - Recursively processes directories for PDF generation using Python script
+- **`scripts/print_all.sh`** - Thin wrapper: validates the directory and runs `dir_to_pdf.py`
+- **`scripts/dir_to_pdf.py`** - Selects files and renders the table of contents plus all files as one PDF
 - **`scripts/combine_to_txt.sh`** - Combines files into markdown-formatted text
 
 ### Configuration
@@ -31,7 +32,7 @@ The project consists of:
 - Finds its install directory from its own real location (following symlinks), or `$CODE2PDF_HOME` if set (the Homebrew formula sets it); errors out if `scripts/` is missing there
 - Puts a private Python environment first on PATH when present: `venv/` (created by `install.sh`) or `.venv/` (a checkout)
 - `--help` and usage errors are handled before dependency checks; `--dev` is accepted but does nothing (kept for compatibility)
-- Performs dependency checking for `python3`, `pygments`, `weasyprint`, `gs` (ghostscript), and `jq`
+- Performs dependency checking for `python3`, `pygments` and `weasyprint`
 - Routes to appropriate processing script based on `-s` (single file) or `-a` (all files) options
 - Defines default filtering rules for directory processing
 
@@ -50,14 +51,15 @@ The project consists of:
 - Optional table of contents generation
 - Verbose mode for debugging
 
-### PDF Directory Processing (`scripts/print_all.sh`)
-- Uses JSON configuration for blacklisted folders, file extensions, and special files
-- Implements new filtering parameters: ignore-files, ignore-types, ignore-folders, include-types
-- Symbolic link recursion prevention using visited directories tracking
-- Generates unique PDF filenames by transforming file paths (e.g., `src/file.js` → `src____file----js.pdf`)
-- Converts files using Python script (`code_to_pdf.py`) for UTF-8/CJK support
-- Creates table of contents from processed files
-- Merges all PDFs into final `merged.pdf` using Ghostscript
+### PDF Directory Processing (`scripts/print_all.sh` → `scripts/dir_to_pdf.py`)
+- `print_all.sh` keeps the original 11 positional arguments and `exec`s `dir_to_pdf.py`
+- JSON lists for blacklisted folders, whitelisted extensions and special file names; plus ignore-files, ignore-types, ignore-folders, include-types
+- Selection rules are identical to the old bash implementation (covered by `tests/test_dir_to_pdf.py`); hidden entries are skipped, symlink loops are cut by tracking real paths, and the output file is never included
+- Files are ordered depth-first, sorted by name within each folder
+- Builds one HTML document — table of contents, then one `<section>` per file — and renders it with WeasyPrint once (about 4× faster than the old per-file PDFs + Ghostscript merge)
+- The table of contents uses `target-counter()` for real page numbers and links; file headings become PDF bookmarks and the page header (`string-set`)
+- `--list-files` prints the selection without rendering (useful for debugging filters)
+- Writes to a temp file next to `merged.pdf` and renames it into place
 
 ### Text Combination (`scripts/combine_to_txt.sh`)
 - Directory traversal with symbolic link protection
@@ -74,10 +76,8 @@ The project consists of:
 
 ## Key Technical Details
 
-**Dependencies**:
+**Dependencies** (Ghostscript and jq are no longer needed):
 - Python 3 with packages: pygments (syntax highlighting), weasyprint (HTML→PDF)
-- Ghostscript/gs (PDF merging operations)
-- jq (JSON parsing)
 
 **Font Support**:
 - Uses Noto Sans CJK fonts for Chinese/Japanese/Korean characters
@@ -183,7 +183,7 @@ cat docs/font_installation_guide.md
 ### Checking dependencies
 
 ```bash
-command -v python3 && command -v gs && command -v jq
+command -v python3
 python3 -c "import pygments; import weasyprint" && echo "Python packages OK"
 ```
 
@@ -234,11 +234,9 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 - **Include-types**: When specified, overrides ignore-types and only processes specified extensions
 
 ### code2pdf Processing Flow
-1. Create a private per-run work directory (`mktemp -d`), removed on exit
-2. Recursively traverse directories applying filtering rules
-3. Convert each qualifying file to PDF using Python script
-4. Generate table of contents from processed files
-5. Merge all PDFs including table of contents into `merged.pdf`
+1. Recursively traverse directories applying filtering rules
+2. Highlight every selected file with Pygments into one HTML document, table of contents first
+3. Render that document once with WeasyPrint into `merged.pdf` (fails with "no matching files" if nothing was selected)
 
 ### code2txt Processing Flow
 1. Parse command-line arguments and validate input directory
@@ -252,10 +250,9 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 
 ### code2pdf
 - Uses Python/Pygments for syntax highlighting with full UTF-8 support
-- File path transformations use Perl regex: `/` → `____`, `.` → `----`
 - Symbolic link recursion is prevented by tracking visited real paths
-- All intermediate files are stored in a private `mktemp -d` work directory before final merge; other files in `/tmp` are never touched
-- Error handling includes explicit checks for PDF creation and file moves
+- No intermediate per-file PDFs and no `/tmp` work files; only a temp file next to the output, renamed into place
+- Page headers show paths relative to the converted directory
 - Debug output is sent to stderr to avoid interfering with normal operation
 - Filtering logic now matches code2txt for consistency
 
@@ -275,7 +272,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 
 **Whitespace in paths**: All scripts properly quote variables to handle spaces in file/folder names.
 
-**Temporary files**: `print_all.sh` writes intermediate PDFs to its own `mktemp -d` directory (under `$TMPDIR`) and deletes it on exit, so concurrent runs and unrelated PDFs in `/tmp` are safe.
+**Temporary files**: directory conversion writes only `.code2pdf-*.pdf` next to `merged.pdf` while rendering, then renames it; nothing in `/tmp` is touched.
 
 **Output location**:
 - Single file: PDF goes to current working directory
@@ -294,13 +291,14 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ## Testing
 
 ### Test Suite Overview
-- **44 automated tests** covering both tools
+- **56 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
   - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
   - code2pdf: 10 unit tests (`test_code2pdf.py`)
   - Launchers: 5 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies
   - Directory conversion: 4 tests (`test_print_all_tmp.py`): `/tmp` isolation, missing directory
+  - One-pass renderer: 12 tests (`test_dir_to_pdf.py`): filter parity with the old bash rules, table of contents first with correct page numbers, relative headers, no Ghostscript needed
   - Integration: 8 tests (`test_integration.py`)
 - code2pdf tests need Pygments and WeasyPrint in `.venv/` (see Running Automated Tests); they skip or fail without them
 - **Test fixtures**: Sample projects and edge cases in `tests/fixtures/`
@@ -332,7 +330,8 @@ requirements-test.txt           # Test dependencies
 scripts/
   code_to_pdf.py                # Python script: source code → PDF (UTF-8 support)
   print_single_file_to_pdf.sh   # Bash wrapper for single file PDF
-  print_all.sh                  # Recursive directory PDF converter
+  print_all.sh                  # Directory conversion entry point (wraps dir_to_pdf.py)
+  dir_to_pdf.py                 # One-pass directory → PDF renderer with table of contents
   combine_to_txt.sh             # Text combination script
   setup_cjk_fonts.sh            # CJK font installation script
 config/
@@ -358,4 +357,4 @@ docs/                           # Documentation
 **What was replaced?**
 - Old: Vim → PostScript → ps2pdf
 - New: Pygments → HTML → WeasyPrint → PDF
-- PDF merging still uses Ghostscript (unchanged)
+- Directory mode no longer merges per-file PDFs with Ghostscript; everything is rendered in one WeasyPrint pass

@@ -68,6 +68,11 @@ pytest --timeout=30
   - `CODE2PDF_HOME` override and missing-scripts error
   - `--help` works without PDF dependencies
 
+- **test_dir_to_pdf.py**: One-pass directory renderer
+  - File selection identical to the old bash rules (`--list-files`)
+  - Table of contents first, with page numbers that match where each file starts
+  - Relative page headers, CJK, no Ghostscript needed, clear error when nothing matches
+
 - **test_print_all_tmp.py**: Directory conversion safety
   - Leaves unrelated files in `/tmp` alone and merges only its own pages
   - Leaves no work files behind
@@ -89,7 +94,7 @@ The `fixtures/` directory contains sample files for testing:
 
 ## Notes
 
-- code2pdf tests need Pygments and WeasyPrint (in `.venv/`), plus ghostscript and jq; some skip without them
+- code2pdf tests need Pygments and WeasyPrint (in `.venv/`), and `pdftotext` (poppler) for text checks; some skip without them. Ghostscript is only used by the tests to count pages
 - `bin/code2pdf` runs the scripts in this checkout, not an installed copy, so tests always exercise your working tree
 - Tests are designed to work on both Linux and macOS
 - The test suite uses subprocess to test the actual bash scripts
