@@ -1,194 +1,78 @@
 #!/bin/bash
 #
 # CJK Font Setup Script for code2pdf
-# Installs Noto Sans CJK fonts for Chinese/Japanese/Korean support
+# Installs Noto Sans Mono CJK (Regular + Bold, ~26 MB download) into ~/.local/share/fonts/noto-cjk.
+# No sudo needed. Every Noto CJK font covers Chinese, Japanese and Korean; the language only
+# picks the regional glyph forms.
 #
 # Usage: ./setup_cjk_fonts.sh [language]
-#   language: sc (Simplified Chinese), tc (Traditional Chinese),
-#             jp (Japanese), kr (Korean), all (all languages)
-#   Default: sc (Simplified Chinese)
+#   language: sc (Simplified Chinese, default), tc (Traditional Chinese), hk (Hong Kong),
+#             jp (Japanese), kr (Korean); "all" is accepted and installs sc
+#
+# Needs curl or wget, and Python or unzip/bsdtar to unpack. Runs fc-cache if available.
 
-set -e  # Exit on error
+set -euo pipefail
 
 LANGUAGE="${1:-sc}"
-FONT_DIR="$HOME/.local/share/fonts/noto-cjk"
-DOWNLOAD_URL="https://github.com/googlefonts/noto-cjk/releases/download/Sans2.004/01_NotoSansCJK-OTF-VF.zip"
-TEMP_DIR="/tmp/noto-cjk-install-$$"
-
-echo "========================================"
-echo "code2pdf CJK Font Installer"
-echo "========================================"
-echo ""
-
-# Check for required commands
-check_dependencies() {
-    local missing=()
-    for cmd in wget python3 fc-cache; do
-        if ! command -v $cmd &> /dev/null; then
-            missing+=($cmd)
-        fi
-    done
-
-    if [ ${#missing[@]} -ne 0 ]; then
-        echo "Error: Missing required dependencies: ${missing[*]}"
-        echo "Please install them first."
-        exit 1
-    fi
-}
-
-# Show usage
-show_usage() {
-    echo "Usage: $0 [LANGUAGE]"
-    echo ""
-    echo "Languages:"
-    echo "  sc    Simplified Chinese (简体中文) [default]"
-    echo "  tc    Traditional Chinese (繁體中文)"
-    echo "  jp    Japanese (日本語)"
-    echo "  kr    Korean (한국어)"
-    echo "  all   All CJK languages"
-    echo ""
-    echo "Examples:"
-    echo "  $0         # Install Simplified Chinese fonts"
-    echo "  $0 jp      # Install Japanese fonts"
-    echo "  $0 all     # Install all CJK fonts"
-    exit 0
-}
-
-# Parse arguments
-if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    show_usage
-fi
-
+# Release asset numbers of Noto Sans Mono CJK in notofonts/noto-cjk Sans2.004 (plain bash 3 syntax)
 case "$LANGUAGE" in
-    sc|SC)
-        LANGUAGE="sc"
-        LANGUAGE_NAME="Simplified Chinese"
-        ;;
-    tc|TC)
-        LANGUAGE="tc"
-        LANGUAGE_NAME="Traditional Chinese"
-        ;;
-    jp|JP)
-        LANGUAGE="jp"
-        LANGUAGE_NAME="Japanese"
-        ;;
-    kr|KR)
-        LANGUAGE="kr"
-        LANGUAGE_NAME="Korean"
-        ;;
-    all|ALL)
-        LANGUAGE="all"
-        LANGUAGE_NAME="All CJK Languages"
-        ;;
-    *)
-        echo "Error: Unknown language '$LANGUAGE'"
-        echo "Run '$0 --help' for usage information."
-        exit 1
-        ;;
+    jp) ASSET="11" ;;
+    kr) ASSET="12" ;;
+    sc|all) LANGUAGE="sc"; ASSET="13" ;;
+    tc) ASSET="14" ;;
+    hk) ASSET="15" ;;
+    *) echo "Unknown language '$LANGUAGE' (use sc, tc, hk, jp or kr)" >&2; exit 1 ;;
 esac
+LABEL="$(echo "$LANGUAGE" | tr '[:lower:]' '[:upper:]')"
 
-echo "Installing fonts for: $LANGUAGE_NAME"
-echo ""
+FONT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/noto-cjk"
+URL="https://github.com/notofonts/noto-cjk/releases/download/Sans2.004/${ASSET}_NotoSansMonoCJK${LANGUAGE}.zip"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
-# Check dependencies
-echo "[1/6] Checking dependencies..."
-check_dependencies
-echo "✓ All dependencies found"
-echo ""
+# Tools from code2pdf's own environment count too (e.g. a conda-forge install has its own python3 and fc-cache)
+export PATH="$PATH:$SCRIPT_DIR/../venv/bin"
 
-# Create directories
-echo "[2/6] Creating directories..."
-mkdir -p "$FONT_DIR"
-mkdir -p "$TEMP_DIR"
-echo "✓ Font directory: $FONT_DIR"
-echo ""
-
-# Download fonts
-echo "[3/6] Downloading Noto Sans CJK fonts..."
-echo "Source: $DOWNLOAD_URL"
-cd "$TEMP_DIR"
-if wget -q --show-progress "$DOWNLOAD_URL"; then
-    echo "✓ Download complete"
+echo "Installing Noto Sans Mono CJK $LABEL into $FONT_DIR"
+echo "Downloading $URL"
+if command -v curl >/dev/null 2>&1; then
+    curl -fL --progress-bar "$URL" -o "$TEMP_DIR/fonts.zip"
+elif command -v wget >/dev/null 2>&1; then
+    wget -q --show-progress "$URL" -O "$TEMP_DIR/fonts.zip"
 else
-    echo "✗ Download failed"
-    rm -rf "$TEMP_DIR"
+    echo "Error: needs curl or wget" >&2
     exit 1
 fi
-echo ""
 
-# Extract fonts
-echo "[4/6] Extracting fonts..."
-python3 -m zipfile -e 01_NotoSansCJK-OTF-VF.zip .
-echo "✓ Extraction complete"
-echo ""
-
-# Install fonts based on language selection
-echo "[5/6] Installing fonts..."
-case "$LANGUAGE" in
-    sc)
-        cp Variable/OTF/Subset/NotoSansSC-VF.otf "$FONT_DIR/"
-        cp Variable/OTF/Mono/NotoSansMonoCJKsc-VF.otf "$FONT_DIR/"
-        echo "✓ Installed Simplified Chinese fonts"
-        ;;
-    tc)
-        cp Variable/OTF/Subset/NotoSansTC-VF.otf "$FONT_DIR/"
-        cp Variable/OTF/Mono/NotoSansMonoCJKtc-VF.otf "$FONT_DIR/"
-        echo "✓ Installed Traditional Chinese fonts"
-        ;;
-    jp)
-        cp Variable/OTF/Subset/NotoSansJP-VF.otf "$FONT_DIR/"
-        cp Variable/OTF/Mono/NotoSansMonoCJKjp-VF.otf "$FONT_DIR/"
-        echo "✓ Installed Japanese fonts"
-        ;;
-    kr)
-        cp Variable/OTF/Subset/NotoSansKR-VF.otf "$FONT_DIR/"
-        cp Variable/OTF/Mono/NotoSansMonoCJKkr-VF.otf "$FONT_DIR/"
-        echo "✓ Installed Korean fonts"
-        ;;
-    all)
-        cp Variable/OTF/Subset/*.otf "$FONT_DIR/"
-        cp Variable/OTF/Mono/*.otf "$FONT_DIR/"
-        echo "✓ Installed all CJK fonts"
-        ;;
-esac
-echo ""
-
-# Update font cache
-echo "[6/6] Updating font cache..."
-fc-cache -f "$FONT_DIR"
-echo "✓ Font cache updated"
-echo ""
-
-# Verify installation
-echo "Verifying installation..."
-INSTALLED_FONTS=$(fc-list | grep -i "noto.*cjk" | wc -l)
-if [ "$INSTALLED_FONTS" -gt 0 ]; then
-    echo "✓ Successfully installed $INSTALLED_FONTS font variants"
-    echo ""
-    echo "Installed fonts:"
-    fc-list | grep -i "noto.*cjk" | sed 's/^/  - /'
+if command -v python3 >/dev/null 2>&1; then
+    python3 -m zipfile -e "$TEMP_DIR/fonts.zip" "$TEMP_DIR/x"
+elif command -v unzip >/dev/null 2>&1; then
+    unzip -q "$TEMP_DIR/fonts.zip" -d "$TEMP_DIR/x"
+elif command -v bsdtar >/dev/null 2>&1; then
+    mkdir -p "$TEMP_DIR/x" && bsdtar -xf "$TEMP_DIR/fonts.zip" -C "$TEMP_DIR/x"
 else
-    echo "✗ Warning: No fonts detected. Installation may have failed."
-    echo "  Try running: fc-cache -fv $FONT_DIR"
+    echo "Error: needs python3, unzip or bsdtar to unpack the fonts" >&2
+    exit 1
 fi
-echo ""
 
-# Cleanup
-echo "Cleaning up temporary files..."
-rm -rf "$TEMP_DIR"
-echo "✓ Cleanup complete"
-echo ""
+mkdir -p "$FONT_DIR"
+find "$TEMP_DIR/x" -name '*.otf' -exec cp {} "$FONT_DIR/" \;
+find "$TEMP_DIR/x" -name 'LICENSE*' -exec cp {} "$FONT_DIR/LICENSE-Noto-CJK.txt" \;
+echo "Installed: $(cd "$FONT_DIR" && ls *.otf | tr '\n' ' ')"
 
-# Show disk usage
-FONT_SIZE=$(du -sh "$FONT_DIR" | cut -f1)
-echo "========================================"
-echo "Installation Complete!"
-echo "========================================"
-echo "Font directory: $FONT_DIR"
-echo "Disk space used: $FONT_SIZE"
-echo ""
-echo "Next steps:"
-echo "1. Test with: code2pdf -s your_file_with_cjk_text.py"
-echo "2. Verify CJK characters render correctly in the PDF"
-echo ""
-echo "For troubleshooting, see: docs/font_installation_guide.md"
+if command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f "$FONT_DIR" >/dev/null 2>&1 || true
+fi
+
+if command -v fc-list >/dev/null 2>&1; then
+    if fc-list ":charset=4e2d" family | grep -q "Noto Sans Mono CJK"; then
+        echo "Done: fontconfig finds Noto Sans Mono CJK; Chinese/Japanese/Korean text will render in code2pdf."
+    else
+        echo "Warning: the fonts are in $FONT_DIR but fontconfig doesn't list them yet." >&2
+        echo "  Try: fc-cache -f \"$FONT_DIR\"" >&2
+        exit 1
+    fi
+else
+    echo "Done (fc-list not available to double-check)."
+fi

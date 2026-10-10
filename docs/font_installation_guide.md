@@ -8,6 +8,8 @@ This guide documents how to install CJK (Chinese/Japanese/Korean) fonts required
 
 code2pdf uses WeasyPrint for PDF generation. Latin text uses the bundled IBM Plex fonts, which have no Chinese, Japanese or Korean glyphs, so those characters come from fonts installed on the system.
 
+> **Quick fix without sudo (Linux):** `~/.local/share/code2pdf/scripts/setup_cjk_fonts.sh` (or `scripts/setup_cjk_fonts.sh` in a checkout) downloads Noto Sans Mono CJK (~26 MB) into `~/.local/share/fonts`. code2pdf warns before converting when no installed font covers the Chinese/Japanese/Korean text it finds.
+
 > **macOS:** no installation needed. Pango falls back to the built-in CJK fonts (PingFang, Hiragino, Apple SD Gothic/Nanum) automatically. This guide is for **Linux**, where the simplest option is `sudo apt install fonts-noto-cjk` (Debian/Ubuntu) or `sudo dnf install google-noto-sans-cjk-fonts` (Fedora).
 
 ## Quick Installation (Recommended)

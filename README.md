@@ -173,11 +173,14 @@ glyphs; those come from the system fonts.
 Chinese, Japanese and Korean text works out of the box on **macOS** — the system fonts
 (PingFang, Hiragino, Apple SD Gothic/Nanum) are used automatically.
 
-On **Linux**, install CJK fonts if your code contains them: `sudo apt install fonts-noto-cjk`
-(Debian/Ubuntu), or use the bundled script for a per-user install:
+On **Linux**, a CJK font must be installed, or those characters print as empty boxes.
+code2pdf checks this and warns before converting. With sudo: `sudo apt install fonts-noto-cjk`
+(the `.deb` recommends it). **Without sudo**, the bundled script downloads Noto Sans Mono CJK
+(~26 MB; it covers Chinese, Japanese and Korean, in a monospace design that keeps code columns
+aligned) into `~/.local/share/fonts`:
 
 ```bash
-./scripts/setup_cjk_fonts.sh sc   # sc, tc, jp, kr, or all (~150 MB)
+~/.local/share/code2pdf/scripts/setup_cjk_fonts.sh      # sc (default), tc, hk, jp or kr glyph forms
 ```
 
 **Full documentation**: [docs/font_installation_guide.md](docs/font_installation_guide.md)

@@ -32,8 +32,11 @@ FONT_FACES = [
     ("c2p Text", "IBMPlexSans-SemiBold.ttf", 600, "normal"),
 ]
 
-# Plex has no CJK glyphs; fall back to the system's CJK fonts
+# Plex has no CJK glyphs; fall back to the system's CJK fonts (monospace ones first for code,
+# so CJK text keeps to the code columns when e.g. setup_cjk_fonts.sh installed Noto Sans Mono CJK)
 CJK_FALLBACK = '"PingFang SC", "Hiragino Sans", "Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans CJK KR", sans-serif'
+CJK_MONO_FALLBACK = ('"Noto Sans Mono CJK SC", "Noto Sans Mono CJK TC", "Noto Sans Mono CJK JP", '
+                     '"Noto Sans Mono CJK KR", "Noto Sans Mono CJK HK", ' + CJK_FALLBACK)
 
 
 class Palette:
@@ -170,7 +173,7 @@ def page_css(theme, header_right, chrome=True):
                   if theme.code_background else ".highlight, .highlight pre { background: none; }")
     pages = chrome_css(theme, header_right) if chrome else f"@page {{ {PAGE_SIZE} }}\n"
     return pages + f"""
-body {{ margin: 0; color: {p.ink}; font: 8.5pt/1.45 "c2p Code", {CJK_FALLBACK}; }}
+body {{ margin: 0; color: {p.ink}; font: 8.5pt/1.45 "c2p Code", {CJK_MONO_FALLBACK}; }}
 
 /* Contents */
 nav.toc {{ font-family: "c2p Text", {CJK_FALLBACK}; }}
