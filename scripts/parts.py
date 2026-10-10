@@ -33,14 +33,16 @@ def part_pages():
 
 
 def default_jobs():
-    """Parts rendered at the same time: 2 (about 2.6 GB peak), 1 on machines under 8 GB."""
+    """Parts rendered at the same time (~1.3 GB each): 3 with 16 GB of RAM or more, 2 with 8 GB or
+    more, else 1; never more than the CPU count."""
     if os.environ.get("CODE2PDF_JOBS"):
         return max(1, int(os.environ["CODE2PDF_JOBS"]))
     try:
         ram = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
     except (ValueError, OSError):
         ram = 8 << 30
-    return max(1, min(2 if ram >= 8 << 30 else 1, os.cpu_count() or 1))
+    jobs = 3 if ram >= 16 << 30 else 2 if ram >= 8 << 30 else 1
+    return max(1, min(jobs, os.cpu_count() or 1))
 
 
 def partition(estimates, part_pages):
@@ -260,8 +262,8 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
                     del annot["/A"]
         for i, (rel, _) in enumerate(entries):
             writer.add_outline_item(rel, starts[i] - 1)
-        writer.add_metadata({"/Title": title, "/CreationDate": _pdf_date(printed_moment),
-                             "/Producer": "code2pdf (WeasyPrint, pypdf)"})
+        writer.add_metadata({"/Title": title, "/Creator": "code2pdf", "/CreationDate": _pdf_date(printed_moment),
+                             "/Producer": "WeasyPrint, pypdf"})
         progress.writing_final()
         writer.write(output)
         _timing("write joined PDF", mark)
