@@ -52,6 +52,7 @@ show_help() {
    echo "  -q, --quiet               No progress output"
    echo "  -j, --jobs N              Big directories render in parts; N parts at a time (default 3 with 16 GB RAM, ~1.3 GB each)"
    echo "  --list-files              With -a: list the files that would be included, without converting"
+   echo "  -V, --version             Show the version, how it is installed, and library versions"
    echo "  -h, --help                Show this help message"
    echo ""
    echo "Examples:"
@@ -151,6 +152,15 @@ main() {
    case "$1" in
        -s|--single|-a|--all|--list-themes) ;;
        -h|--help) show_help; exit 0 ;;
+       -V|--version)
+           # Before the dependency check, so it also works (and helps debug) a broken install
+           get_install_dir
+           if command -v python3 &> /dev/null; then
+               python3 "$SCRIPTS_DIR/version.py" code2pdf
+           else
+               echo "code2pdf (version unknown: python3 not found), $INSTALL_DIR"
+           fi
+           exit 0 ;;
        *) show_help; exit 1 ;;
    esac
 

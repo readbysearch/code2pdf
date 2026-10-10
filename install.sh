@@ -295,6 +295,13 @@ install_tools() {
     print_info "Installing files..."
     $SUDO mkdir -p "$SHARE_DIR" "$INSTALL_DIR"
     $SUDO cp -R "$SRC/bin" "$SRC/scripts" "$SRC/config" "$SRC/fonts" "$SRC/requirements.txt" "$SHARE_DIR/"
+    # VERSION is filled in by GitHub tarballs (export-subst); for a local checkout, ask git
+    if [[ -f "$SRC/VERSION" ]] && ! grep -q '\$Format' "$SRC/VERSION"; then
+        $SUDO cp "$SRC/VERSION" "$SHARE_DIR/VERSION"
+    elif git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "$(git -C "$SRC" describe --tags --dirty --always)|$(git -C "$SRC" rev-parse --short HEAD)|$(git -C "$SRC" log -1 --format=%cs)" \
+            | $SUDO tee "$SHARE_DIR/VERSION" >/dev/null
+    fi
     $SUDO chmod +x "$SHARE_DIR"/bin/* "$SHARE_DIR"/scripts/*.sh
 
     print_info "Creating Python environment with Pygments, WeasyPrint and pypdf..."

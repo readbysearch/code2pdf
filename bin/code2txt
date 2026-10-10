@@ -47,6 +47,7 @@ Options:
                          (default: 500K)
   --no-toc               Skip table of contents generation
   --verbose              Show processing details
+  -V, --version          Show the version and how it is installed
   -h, --help             Show this help message
 
 Examples:
@@ -98,6 +99,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -h|--help)
             show_help
+            exit 0
+            ;;
+        -V|--version)
+            python3 "$SCRIPTS_DIR/version.py" code2txt --no-deps 2>/dev/null || echo "code2txt (version unknown), $INSTALL_DIR"
             exit 0
             ;;
         -*)
