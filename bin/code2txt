@@ -11,9 +11,18 @@ NO_TOC=false
 VERBOSE=false
 TARGET_DIR=""
 
-# Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
+# Resolve the install directory (the parent of this script's real bin/ dir), following symlinks;
+# CODE2PDF_HOME overrides it (used by the Homebrew formula)
+resolve_install_dir() {
+    local src="${BASH_SOURCE[0]}" dir
+    while [ -L "$src" ]; do
+        dir="$(cd -P "$(dirname "$src")" && pwd)"
+        src="$(readlink "$src")"
+        case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+    done
+    cd -P "$(dirname "$src")/.." && pwd
+}
+INSTALL_DIR="${CODE2PDF_HOME:-$(resolve_install_dir)}"
 SCRIPTS_DIR="$INSTALL_DIR/scripts"
 
 # Help text

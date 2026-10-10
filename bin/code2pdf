@@ -1,21 +1,39 @@
 #!/usr/bin/env bash
 
-DEV_MODE=false
 IGNORE_FILES=""
 IGNORE_TYPES=""
 IGNORE_FOLDERS=""
 INCLUDE_TYPES=""
 
-# Get the directory where the script is located
+# Resolve the install directory (the parent of this script's real bin/ dir), following symlinks
+resolve_install_dir() {
+   local src="${BASH_SOURCE[0]}" dir
+   while [ -L "$src" ]; do
+       dir="$(cd -P "$(dirname "$src")" && pwd)"
+       src="$(readlink "$src")"
+       case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+   done
+   cd -P "$(dirname "$src")/.." && pwd
+}
+
+# CODE2PDF_HOME overrides the location (used by the Homebrew formula)
 get_install_dir() {
-   if [ "$DEV_MODE" = true ]; then
-       INSTALL_DIR="/Users/<you>/git/code2pdf"
-   else
-       BREW_PREFIX="$(brew --prefix)"
-       INSTALL_DIR="$BREW_PREFIX/opt/code2pdf"
-   fi
+   INSTALL_DIR="${CODE2PDF_HOME:-$(resolve_install_dir)}"
    SCRIPTS_DIR="$INSTALL_DIR/scripts"
    CONFIG_DIR="$INSTALL_DIR/config"
+   if [ ! -f "$SCRIPTS_DIR/print_all.sh" ]; then
+       echo "Error: code2pdf scripts not found in $SCRIPTS_DIR" >&2
+       exit 1
+   fi
+
+   # Use a private Python environment if there is one: venv/ (install.sh) or .venv/ (a checkout)
+   for venv in "$INSTALL_DIR/venv" "$INSTALL_DIR/.venv"; do
+       if [ -x "$venv/bin/python3" ]; then
+           PATH="$venv/bin:$PATH"
+           export PATH
+           break
+       fi
+   done
 }
 
 # Help text
@@ -29,7 +47,6 @@ show_help() {
    echo "  --ignore-folders LIST     Comma-separated list of folders to skip"
    echo "  --ignore-files LIST       Comma-separated list of specific files to ignore"
    echo "  --include-types LIST      Only include these file types (overrides default whitelist)"
-   echo "  --dev                     Use local development directory"
    echo "  -h, --help                Show this help message"
    echo ""
    echo "Examples:"
@@ -39,7 +56,6 @@ show_help() {
    echo "  code2pdf -a --ignore-types md,txt src/                       # Ignore file types"
    echo "  code2pdf -a --include-types js,ts src/                       # Only include JS/TS files"
    echo "  code2pdf -a --ignore-folders tests,docs src/                 # Skip folders"
-   echo "  code2pdf --dev -s myfile.py                                  # Use development directory"
 }
 
 # Check dependencies
@@ -55,24 +71,17 @@ check_dependencies() {
 
    # Check for Python packages
    if command -v python3 &> /dev/null; then
-       if ! python3 -c "import pygments" 2> /dev/null; then
-           echo "Error: Python package 'pygments' is not installed"
-           echo "Please install it using: pip3 install --user pygments"
-           exit 1
-       fi
-       if ! python3 -c "import weasyprint" 2> /dev/null; then
-           echo "Error: Python package 'weasyprint' is not installed"
-           echo "Please install it using: pip3 install --user weasyprint"
+       if ! python3 -c "import pygments, weasyprint" 2> /dev/null; then
+           echo "Error: Python packages 'pygments' and 'weasyprint' are not available" >&2
+           echo "  Homebrew:  brew reinstall readbysearch/tap/code2pdf" >&2
+           echo "  Checkout:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt" >&2
            exit 1
        fi
    fi
 
    if [ ${#missing[@]} -ne 0 ]; then
-       echo "Error: Missing required dependencies: ${missing[*]}"
-       echo "Please install them:"
-       echo "  - python3: brew install python3"
-       echo "  - gs (ghostscript): see ps2pdf_installation_guide.md"
-       echo "  - jq: brew install jq"
+       echo "Error: Missing required dependencies: ${missing[*]}" >&2
+       echo "Please install them (e.g. brew install python3 ghostscript jq, or apt install python3-venv ghostscript jq)" >&2
        exit 1
    fi
 }
@@ -86,7 +95,7 @@ main() {
    while [[ $# -gt 0 ]]; do
        case "$1" in
            --dev)
-               DEV_MODE=true
+               # Kept for compatibility: the launcher now always uses the directory it is installed in
                shift
                ;;
            --ignore-files)
@@ -116,6 +125,12 @@ main() {
    # Restore positional parameters from stored arguments
    set -- "${args[@]}"
    
+   case "$1" in
+       -s|--single|-a|--all) ;;
+       -h|--help) show_help; exit 0 ;;
+       *) show_help; exit 1 ;;
+   esac
+
    get_install_dir
    check_dependencies
    
