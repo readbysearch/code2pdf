@@ -103,10 +103,17 @@ class TestRendering:
         result = run_script(tree)
         assert result.returncode == 0, result.stderr
         pdf = tree / "merged.pdf"
-        first_page = subprocess.run(["pdftotext", "-f", "1", "-l", "1", str(pdf), "-"],
+        first_page = subprocess.run(["pdftotext", "-layout", "-f", "1", "-l", "1", str(pdf), "-"],
                                     capture_output=True, text=True).stdout
-        assert "Table of Contents" in first_page
-        entries = dict(re.findall(r"(\S+?)\s*\.{3,}\s*(\d+)", first_page))
+        # Contents are grouped by folder: a heading "sub/deep/" then entries "d.ts . . . 7"
+        entries, folder = {}, ""
+        for line in first_page.splitlines():
+            line = line.strip()
+            entry = re.match(r"(\S+?)\s*(?:\.\s*){3,}(\d+)$", line)
+            if entry:
+                entries[(folder + entry.group(1)).lstrip("/")] = entry.group(2)
+            elif line.endswith("/"):
+                folder = "" if line == f"{tree.name}/" else line
         assert set(entries) == {"Dockerfile", "LICENSE", "Makefile", "a.py", "b.md",
                                 "sub/c.js", "sub/deep/d.ts", "tests/t.py"}
         for path, page in entries.items():

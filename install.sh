@@ -225,7 +225,7 @@ install_tools() {
 
     print_info "Installing files..."
     $SUDO mkdir -p "$SHARE_DIR" "$INSTALL_DIR"
-    $SUDO cp -R "$SRC/bin" "$SRC/scripts" "$SRC/config" "$SRC/requirements.txt" "$SHARE_DIR/"
+    $SUDO cp -R "$SRC/bin" "$SRC/scripts" "$SRC/config" "$SRC/fonts" "$SRC/requirements.txt" "$SHARE_DIR/"
     $SUDO chmod +x "$SHARE_DIR"/bin/* "$SHARE_DIR"/scripts/*.sh
 
     print_info "Creating Python environment with Pygments and WeasyPrint..."
