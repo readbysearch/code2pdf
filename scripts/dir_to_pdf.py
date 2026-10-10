@@ -33,6 +33,7 @@ import fnmatch
 import html
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -125,6 +126,7 @@ class Selector:
         self.include_types = set(split_list(args.include_types))
         self.includes = [Pattern(text, root) for text in getattr(args, "include", None) or []]
         self.excludes = [Pattern(text, root) for text in getattr(args, "exclude", None) or []]
+        self.binaries = []  # binary files that matched, skipped
 
     def excluded(self, parts):
         return any([pattern.covers(parts) for pattern in self.excludes])  # list: mark every match used
@@ -185,18 +187,26 @@ def collect_files(root, selector, exclude):
                 if os.path.realpath(path) in exclude or selector.excluded(rel_parts):
                     continue
                 default = not forced and not name.startswith(".") and selector.wants_file(name)
-                if (selector.included(rel_parts) or default) and not skip_binary(path, root):
+                if (selector.included(rel_parts) or default) and not skip_binary(path, root, selector):
                     selected.append(os.path.relpath(path, root))
 
     walk(root, [], False)
     return selected
 
 
-def skip_binary(path, root):
+def skip_binary(path, root, selector):
+    """Binary files can't be printed; they are reported together by report_binaries()."""
     if is_binary(path):
-        print(f"Skipping binary file: {os.path.relpath(path, root)}", file=sys.stderr)
+        selector.binaries.append(os.path.relpath(path, root))
         return True
     return False
+
+
+def report_binaries(binaries):
+    if binaries:
+        shown = ", ".join(binaries[:3]) + (", …" if len(binaries) > 3 else "")
+        noun = "file" if len(binaries) == 1 else "files"
+        print(f"Skipped {len(binaries)} binary {noun}: {shown}", file=sys.stderr)
 
 
 def read_file_list(source, root, selector, exclude):
@@ -223,7 +233,7 @@ def read_file_list(source, root, selector, exclude):
         elif rel not in seen:
             seen.add(rel)
             if (os.path.realpath(path) in exclude or selector.excluded(rel.split(os.sep))
-                    or skip_binary(path, root)):
+                    or skip_binary(path, root, selector)):
                 continue
             selected.append(rel)
     if problems:
@@ -569,6 +579,26 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
         print(cjk_reminder, file=sys.stderr)
 
 
+def exit_on_signals():
+    """End the run on SIGTERM or SIGHUP (a command timeout, a closed terminal) the way Ctrl-C
+    does, so `finally` removes the temp files and parts workers are stopped."""
+    def stop(signum, frame):
+        raise KeyboardInterrupt(signal.Signals(signum).name)
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, stop)
+
+
+def run_main(main, *args):
+    """sys.exit(main(*args)), with an interruption reported in one line instead of a traceback."""
+    exit_on_signals()
+    try:
+        return main(*args)
+    except KeyboardInterrupt as e:
+        print(f"code2pdf: stopped ({e.args[0] if e.args else 'SIGINT'}); nothing was written",
+              file=sys.stderr)
+        return 130
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Convert a directory of source files into one PDF.")
     for name in ("root", "output", "blacklist_json", "blacklist_pattern", "extensions_json",
@@ -616,6 +646,7 @@ def main(argv=None):
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    report_binaries(selector.binaries)
     for option, text in selector.unused_patterns():
         print(f"Warning: {option} {text!r} matched nothing", file=sys.stderr)
     if args.list_files:
@@ -638,4 +669,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    sys.exit(main())
+    sys.exit(run_main(main))

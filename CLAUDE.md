@@ -85,6 +85,10 @@ and lessons that were expensive to learn.
 - `VERSION` is filled in by git export-subst in GitHub tarballs (`%(describe:tags)` works there);
   CI checkouts have no `.git` and no tags. raw.githubusercontent.com caches files for 5 minutes.
 - With `pipefail`, `cmd | grep -q` fails when grep exits early (SIGPIPE): capture output first.
+- Agents run code2pdf under command timeouts. Launchers `exec` down to Python so signals reach
+  it; `run_main` turns SIGTERM/SIGHUP into KeyboardInterrupt so `finally` removes temp files;
+  parts mode terminates its workers on abort (`shutdown()` alone waits for each part).
+  `tests/test_interrupt.py` covers it.
 
 ## Testing
 

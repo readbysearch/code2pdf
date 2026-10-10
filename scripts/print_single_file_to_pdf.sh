@@ -41,8 +41,5 @@ fi
 # Get the directory where this script is located
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Convert the file to PDF using Python script with UTF-8 support (it reports where the PDF went)
-if ! python3 "$script_dir/code_to_pdf.py" "$file_name" "$output" "$file_name"; then
-    echo "Error: Failed to create PDF" >&2
-    exit 1
-fi
+# exec, so a signal sent to code2pdf reaches Python (it reports errors and where the PDF went)
+exec python3 "$script_dir/code_to_pdf.py" "$file_name" "$output" "$file_name"
