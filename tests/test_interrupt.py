@@ -61,13 +61,15 @@ def descendants(pid):
 
 
 def alive(pids):
+    """PIDS still running. A zombie has exited: in a container whose init doesn't reap (GitHub
+    Actions runs `tail -f /dev/null` as PID 1), Python 3.12's resource tracker, which exits just
+    after its parent, stays one."""
     out = []
     for pid in pids:
-        try:
-            os.kill(pid, 0)
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True,
+                               text=True).stdout.strip()
+        if state and not state.startswith("Z"):
             out.append(pid)
-        except ProcessLookupError:
-            pass
     return out
 
 
