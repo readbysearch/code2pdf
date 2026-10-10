@@ -49,6 +49,7 @@ CASES = FIXTURE_CASES + real_cases.REAL_CASES + real_cases.SCALE_CASES
 BY_ID = {case["id"]: case for case in CASES}
 
 RESULTS = os.path.join(HERE, "results")
+CLAUDE = shutil.which("claude") or "claude"  # by path: the agents' PATH leaves out Homebrew
 SPLIT_SEED = 2026
 TEST_FRACTION = 0.4
 TIMEOUT = 600
@@ -56,6 +57,16 @@ PROMPT = """{request}
 
 Use code2pdf (it's installed) and save the PDF as {output}. I'm not around to answer questions, \
 so don't ask; just get it right. Don't change or add anything inside the project."""
+PROMPT_TXT = """{request}
+
+I want it as one text file for an LLM's context: use code2txt (it's installed) and save it as \
+{output}. I'm not around to answer questions, so don't ask; just get it right. Don't change or \
+add anything inside the project."""
+
+
+def applies(case, tool):
+    """code2txt takes a directory, not a single file, and renders nothing slow."""
+    return tool == "code2pdf" or (case.get("match") != "basename" and not case.get("scale"))
 
 
 # --- split -------------------------------------------------------------------------------
@@ -89,7 +100,7 @@ def select(which, case_set="all"):
 
 # --- install a clean copy of code2pdf -----------------------------------------------------
 
-def install_copy(dest, ref=None):
+def install_copy(dest, ref=None, tool="code2pdf"):
     """bin/, scripts/, fonts/ (from the working tree, or from git REF such as v3.8) and a copy
     of .venv, with nothing that names this repository."""
     os.makedirs(dest)
@@ -117,6 +128,16 @@ def install_copy(dest, ref=None):
     for name in os.listdir(os.path.join(venv, "bin")):
         if not name.startswith("python"):
             os.remove(os.path.join(venv, "bin", name))
+    if tool == "code2txt":
+        # Only code2txt: with code2pdf next to it, agents let code2pdf pick the files, and the
+        # score no longer says anything about code2txt
+        os.remove(os.path.join(dest, "bin", "code2pdf"))
+        for name in os.listdir(os.path.join(dest, "scripts")):
+            if name not in ("combine_to_txt.sh", "version.py"):
+                path = os.path.join(dest, "scripts", name)
+                shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+        shutil.rmtree(os.path.join(dest, "venv"))
+        shutil.rmtree(os.path.join(dest, "fonts"))
     leak = subprocess.run(["grep", "-rIl", REPO, dest], capture_output=True, text=True).stdout.strip()
     if leak:
         raise SystemExit(f"install copy still names {REPO}:\n{leak}")
@@ -125,13 +146,31 @@ def install_copy(dest, ref=None):
 
 def subject_env(bin_dir, scale=False):
     env = {k: v for k, v in os.environ.items() if not k.startswith(("CODE2PDF_", "CLAUDE", "VIRTUAL_ENV"))}
-    env["PATH"] = bin_dir + os.pathsep + "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    # No /opt/homebrew/bin or /usr/local/bin: they hold this machine's own code2pdf install
+    env["PATH"] = bin_dir + os.pathsep + "/usr/bin:/bin:/usr/sbin:/sbin"
     if not scale:
         env["CODE2PDF_JOBS"] = "1"  # several runs render at once; keep each to ~1.3 GB
     return env
 
 
 # --- grading -----------------------------------------------------------------------------
+
+def txt_files(path):
+    """File paths in a code2txt output, in order: each file is a `## path` line followed by a
+    code fence (Markdown files' own headings are inside their fence)."""
+    lines = open(path, encoding="utf-8", errors="replace").read().split("\n")
+    if lines and lines[0].strip() == "# Table of Contents":
+        # The contents list is authoritative: Markdown files are not escaped, so their own
+        # "## Heading" + code block could look like a file
+        toc = []
+        for line in lines[1:]:
+            if line.strip() == "---":
+                return toc
+            if line.startswith("- "):
+                toc.append(line[2:].strip())
+    return [lines[i][3:].strip() for i in range(len(lines) - 1)
+            if lines[i].startswith("## ") and lines[i + 1].startswith("```")]
+
 
 def pdf_files(path):
     """File paths in the PDF, in order, from its bookmarks."""
@@ -164,13 +203,13 @@ def add_converted_folder(got, expected):
     return [best + g for g in got]
 
 
-def grade(case, output, before, after):
+def grade(case, output, before, after, tool="code2pdf"):
     result = {"pdf": os.path.exists(output), "missing": [], "extra": [], "order_ok": None,
               "project_changed": sorted(set(before) ^ set(after)
                                         | {p for p in before if p in after and before[p] != after[p]})}
     if result["pdf"]:
         try:
-            got = pdf_files(output)
+            got = txt_files(output) if tool == "code2txt" else pdf_files(output)
         except Exception as e:  # not a PDF, or no bookmarks
             got, result["pdf_error"] = [], str(e)
         expected = list(case["expected"])
@@ -203,7 +242,7 @@ def prepare(case, workdir):
         real_cases.build(case["project"], project, case.get("setup"))
     if callable(case["expected"]):
         case = dict(case, expected=case["expected"](project))
-    output_rel = f"../out/{case['id']}.pdf"
+    output_rel = f"../out/{case['id']}.pdf"  # run_one renames it for code2txt
     return project, output_rel, os.path.normpath(os.path.join(project, output_rel)), case
 
 
@@ -211,9 +250,12 @@ def run_one(case, rep, args, bin_dir, transcripts):
     workdir = tempfile.mkdtemp(prefix="c2p-eval-")
     try:
         project, output_rel, output, case = prepare(case, workdir)
+        if args.tool == "code2txt":
+            output_rel, output = output_rel[:-4] + ".md", output[:-4] + ".md"
         before = projects.snapshot(project)
-        prompt = PROMPT.format(request=case["request"], output=output_rel)
-        cmd = ["claude", "-p", prompt, "--model", args.model, "--setting-sources", "project",
+        prompt = (PROMPT_TXT if args.tool == "code2txt" else PROMPT).format(request=case["request"],
+                                                                             output=output_rel)
+        cmd = [CLAUDE, "-p", prompt, "--model", args.model, "--setting-sources", "project",
                "--permission-mode", "dontAsk", "--allowedTools", "Bash", "Read", "Glob", "Grep",
                "--output-format", "stream-json", "--verbose", "--no-session-persistence",
                "--max-budget-usd", str(args.max_budget)]
@@ -239,13 +281,13 @@ def run_one(case, rep, args, bin_dir, transcripts):
         stats = transcript_stats(stream)
         if stats.get("api_error"):
             infra = infra or stats["api_error"]
-        result = grade(case, output, before, projects.snapshot(project))
+        result = grade(case, output, before, projects.snapshot(project), args.tool)
         # Runs share the machine's /tmp: a fixed name like /tmp/files.txt can be overwritten
         # by a concurrent run, which is the eval's fault, not the agent's
         if not result["pass"] and not infra and args.jobs > 1 and any(re.search(r"(?<![\w.])/tmp/[\w.-]+", c)
                                                     for c in stats["commands"]):
             infra = "suspected collision: used a fixed /tmp file while other runs were going"
-        return {"case": case["id"], "rep": rep, "model": args.model, "effort": args.effort,
+        return {"case": case["id"], "rep": rep, "model": args.model, "effort": args.effort, "tool": args.tool,
                 "started": round(started),
                 "seconds": round(elapsed, 1), "infra_error": infra, **stats, **result}
     finally:
@@ -267,21 +309,21 @@ def transcript_stats(stream):
             final, cost, turns = event.get("result"), event.get("total_cost_usd"), event.get("num_turns")
             if event.get("is_error") and event.get("subtype") != "success":
                 api_error = f"result {event.get('subtype')}: {str(final)[:200]}"
-    code2pdf = [c for c in commands if "code2pdf" in c]
+    code2pdf = [c for c in commands if "code2pdf" in c or "code2txt" in c]
     return {"commands": commands, "final": final, "cost_usd": cost, "turns": turns,
             "code2pdf_calls": len(code2pdf), "used_list_files": any("--list-files" in c for c in code2pdf),
             "read_help": any("--help" in c or " -h" in c for c in code2pdf), "api_error": api_error}
 
 
 def cmd_run(args):
-    ids = select(args.split, args.set)
+    ids = [i for i in select(args.split, args.set) if applies(BY_ID[i], args.tool)]
     out_dir = os.path.join(RESULTS, args.label)
     transcripts = os.path.join(out_dir, "transcripts")
     os.makedirs(transcripts, exist_ok=True)
     install = tempfile.mkdtemp(prefix="c2p-install-")
-    bin_dir = install_copy(os.path.join(install, "code2pdf"), args.ref)
+    bin_dir = install_copy(os.path.join(install, "code2pdf"), args.ref, args.tool)
     with open(os.path.join(out_dir, "meta.json"), "w") as f:
-        json.dump({"label": args.label, "model": args.model, "ref": args.ref, "effort": args.effort, "repeats": args.repeats,
+        json.dump({"label": args.label, "model": args.model, "ref": args.ref, "tool": args.tool, "effort": args.effort, "repeats": args.repeats,
                    "cases": ids, "split": args.split, "started": datetime.datetime.now().isoformat(),
                    "commit": subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"],
                                             capture_output=True, text=True).stdout.strip(),
@@ -318,10 +360,10 @@ def cmd_rerun_infra(args):
     runs = load(args.label)
     flagged = [r for r in runs if r["infra_error"]]
     print(f"{args.label}: re-running {len(flagged)} runs one at a time")
-    run_args = argparse.Namespace(model=meta["model"], effort=meta["effort"], jobs=1,
+    run_args = argparse.Namespace(model=meta["model"], effort=meta["effort"], jobs=1, tool=meta.get("tool", "code2pdf"),
                                   max_budget=args.max_budget)
     install = tempfile.mkdtemp(prefix="c2p-install-")
-    bin_dir = install_copy(os.path.join(install, "code2pdf"), meta.get("ref"))
+    bin_dir = install_copy(os.path.join(install, "code2pdf"), meta.get("ref"), meta.get("tool", "code2pdf"))
     transcripts = os.path.join(out_dir, "transcripts")
     replaced = {}
     for r in flagged:
@@ -534,6 +576,7 @@ def main():
     p.add_argument("--split", default="all", help="train, test, all, or comma-separated case ids")
     p.add_argument("--set", default="all", help="fixtures, real or all")
     p.add_argument("--ref", default=None, help="test code2pdf as of this git ref (default: working tree)")
+    p.add_argument("--tool", default="code2pdf", choices=["code2pdf", "code2txt"])
     p.add_argument("--jobs", type=int, default=6)
     p.add_argument("--max-budget", type=float, default=1.0)
     p = sub.add_parser("rerun-infra")
