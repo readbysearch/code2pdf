@@ -102,7 +102,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requiremen
 - **Before tagging, run the suite on an exact CI replica**: `git archive HEAD` unpacked into
   `ubuntu:24.04` and `ubuntu:26.04` containers with Ubuntu's `weasyprint python3-pygments
   python3-pypdf fonts-noto-cjk python3-pytest poppler-utils ghostscript git`. v3.7's release
-  failed on assumptions that only hold on macOS or in a git checkout.
+  failed on assumptions that only hold on macOS or in a git checkout. Start the container as
+  GitHub does (`docker run -d … tail -f /dev/null`, then `docker exec`): its PID 1 never reaps
+  orphans, which `bash -c` does (v3.10 failed on a zombie only that setup shows).
 - `packaging/deb/test-deb.sh DEB` installs, uses and removes the `.deb` in a fresh container.
 - **Agent eval** (`evals/agent_selection/`, see its README and RESULTS): headless agents turn
   plain-language requests into PDFs; it needs the `claude` CLI and costs money, so it is not part
