@@ -223,13 +223,17 @@ def missing_cjk_fonts(texts, fc_list="auto"):
 
 
 def warn_missing_cjk_fonts(texts):
+    """Print a warning if CJK text has no font; return a one-line reminder for after "Done:" (or "")."""
     missing = missing_cjk_fonts(texts)
-    if missing:
-        setup = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_cjk_fonts.sh")
-        print(f"Warning: the files contain {'/'.join(missing)} text, but no installed font has those characters,\n"
-              f"  so they will print as empty boxes. Install a CJK font, then convert again:\n"
-              f"    without sudo: {setup}   (~26 MB, into ~/.local/share/fonts)\n"
-              f"    with sudo:    sudo apt install fonts-noto-cjk", file=sys.stderr)
+    if not missing:
+        return ""
+    setup = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_cjk_fonts.sh")
+    print(f"Warning: the files contain {'/'.join(missing)} text, but no installed font has those characters,\n"
+          f"  so they will print as empty boxes. Install a CJK font, then convert again:\n"
+          f"    without sudo: {setup}   (~26 MB, into ~/.local/share/fonts)\n"
+          f"    with sudo:    sudo apt install fonts-noto-cjk", file=sys.stderr)
+    return (f"Warning: {'/'.join(missing)} text printed as empty boxes (no CJK font installed). "
+            f"Fix: {setup}, then convert again.")
 
 
 def count_lines(source):
@@ -366,7 +370,7 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
 
     theme = themes.resolve_theme(theme_name)
     sources = {path: read_source(path) for _, path in entries}
-    warn_missing_cjk_fonts(list(sources.values()) + [rel for rel, _ in entries])
+    cjk_reminder = warn_missing_cjk_fonts(list(sources.values()) + [rel for rel, _ in entries])
     progress = progress_report.Progress(
         sys.stderr, files=len(entries), lines=sum(count_lines(text) for text in sources.values()),
         estimated_pages=progress_report.estimate_pages(list(sources.values()), contents=contents), quiet=quiet)
@@ -401,6 +405,8 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
             if os.path.exists(tmp):
                 os.remove(tmp)
         progress.done(pages=pages, output=output)
+        if cjk_reminder:
+            print(cjk_reminder, file=sys.stderr)
         return
 
     document = build_html(entries, theme, project, moment, info, contents=contents, sources=sources)
@@ -418,6 +424,8 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
         if os.path.exists(tmp):
             os.remove(tmp)
     progress.done(pages=len(rendered.pages), output=output)
+    if cjk_reminder:
+        print(cjk_reminder, file=sys.stderr)
 
 
 def parse_args(argv):

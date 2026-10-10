@@ -90,7 +90,8 @@ The project consists of:
 - Latin text uses the bundled IBM Plex fonts; Chinese/Japanese/Korean comes from system fonts
 - macOS: no setup needed; Pango falls back to system CJK fonts (PingFang, Hiragino, Apple SD Gothic/Nanum)
 - Linux: install `fonts-noto-cjk`, or run `setup_cjk_fonts.sh` (no sudo; downloads Noto Sans Mono CJK Regular/Bold, ~26 MB, into `~/.local/share/fonts/noto-cjk/`; needs curl or wget and python3/unzip/bsdtar; uses `venv/bin` tools too, so it works for conda-forge installs)
-- Missing CJK fonts are detected before converting (`missing_cjk_fonts`: one `fc-list :charset=<probe>` per script that occurs: 中 3042 한) and reported with the fix; without such a font the PDF still extracts correct text but shows empty boxes, so text-based tests can't catch it
+- `install.sh --user` on Linux installs Noto Sans Mono CJK via `setup_cjk_fonts.sh` when `fc-list :charset=4e2d` (system or `venv/bin/fc-list`) finds nothing; `--no-cjk-fonts` skips it; `--system` installs only warn (root's font folder isn't shared). Added after node 31 printed CJK as boxes: the warning-only fix was missed in the install log
+- Missing CJK fonts are detected before converting (`missing_cjk_fonts`: one `fc-list :charset=<probe>` per script that occurs: 中 3042 한) and reported with the fix, again after "Done:" so it doesn't scroll away; without such a font the PDF still extracts correct text but shows empty boxes, so text-based tests can't catch it
 - Code text prefers monospace CJK fonts (`CJK_MONO_FALLBACK`: Noto Sans Mono CJK first), titles use proportional ones
 - **Installation guide**: See `docs/font_installation_guide.md`
 - **Quick setup**: Run `./scripts/setup_cjk_fonts.sh [sc|tc|jp|kr|all]`
