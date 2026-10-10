@@ -8,6 +8,8 @@ This guide documents how to install CJK (Chinese/Japanese/Korean) fonts required
 
 code2pdf uses WeasyPrint for PDF generation, which requires fonts that contain the necessary glyphs for Chinese, Japanese, and Korean characters. The default system fonts (DejaVu) only support Latin characters.
 
+> **macOS:** no installation needed. Pango falls back to the built-in CJK fonts (PingFang, Hiragino, Apple SD Gothic/Nanum) automatically. This guide is for **Linux**, where the simplest option is `sudo apt install fonts-noto-cjk` (Debian/Ubuntu) or `sudo dnf install google-noto-sans-cjk-fonts` (Fedora).
+
 ## Quick Installation (Recommended)
 
 ### For Simplified Chinese (简体中文)
