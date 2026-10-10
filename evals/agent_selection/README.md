@@ -57,12 +57,22 @@ no eval files and nothing pointing back to this repository, so the answers are o
 reach. Runs with an API error or timeout are reported as infrastructure errors and kept
 out of the score.
 
+## Tools
+
+`--tool code2pdf` (the default) or `--tool code2txt`. With code2txt the agent is asked for a
+text file, graded from its contents list. Only the tool being measured is installed: with
+both installed, agents let code2pdf pick the files for code2txt. Single-file cases, scale
+cases and cases phrased "code2pdf's normal selection" don't apply to code2txt.
+
 ## Running
 
 ```bash
 .venv/bin/python evals/agent_selection/run.py check
 .venv/bin/python evals/agent_selection/run.py run --label base-sonnet --model sonnet --repeats 3
 .venv/bin/python evals/agent_selection/run.py run --label opus --model opus --effort high --split test
+.venv/bin/python evals/agent_selection/run.py run --label v38 --ref v3.8      # an older release
+.venv/bin/python evals/agent_selection/run.py run --label txt --tool code2txt
+.venv/bin/python evals/agent_selection/run.py rerun-infra txt                  # re-judge flagged runs alone
 .venv/bin/python evals/agent_selection/run.py report base-sonnet opus
 ```
 
