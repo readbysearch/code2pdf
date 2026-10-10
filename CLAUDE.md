@@ -20,6 +20,7 @@ The project consists of:
 - **`scripts/code_to_pdf.py`** - Single-file mode (same design, no contents page) and shared helpers (`lexer_for`, `read_source`)
 - **`scripts/theme.py`** - Themes (paper, mono, any Pygments style), bundled font setup and page CSS
 - **`scripts/progress.py`** - Page estimate and progress display ([1/3] preparing, [2/3] layout per page, [3/3] writing)
+- **`scripts/parts.py`** - Big documents (> 2 × 100 estimated pages): render ~100-page parts in child processes, then join with pypdf
 - **`fonts/`** - Bundled IBM Plex Mono/Sans TTFs (OFL 1.1); found relative to `scripts/` in every install layout
 - **`scripts/print_single_file_to_pdf.sh`** - Converts individual files to PDF using Python script
 - **`scripts/print_all.sh`** - Thin wrapper: validates the directory and runs `dir_to_pdf.py`
@@ -47,6 +48,7 @@ The project consists of:
 - Layout: line numbers in the left margin (`::before` counters on Pygments `linespans`), wrapped lines hang under the code; each file opens with folder, name and details; page header = path (left) and `project, date` (right)
 - Dates (`source_info`): contents page shows `Printed <date> from commit <hash> (<branch>)` (+ `with uncommitted changes`); each file shows `last changed <date>` (one streamed `git log --relative`), `uncommitted changes` (from `git status`), or `modified <date>` outside git. `$SOURCE_DATE_EPOCH` fixes the printing date; PDF metadata gets title and creation time
 - Progress: `render_document` forwards WeasyPrint's `weasyprint.progress` log (Step 1 / per-page Step 5 / Step 6) to `progress.Progress`; `estimate_pages` predicts the total from rows (wrapped at 89 columns, 59 rows per page), exact on ClaudeTerminal (873 pages). In a terminal a ticker thread keeps the two silent stages moving; `-q`/`--quiet`/`$CODE2PDF_QUIET` turns it off. Measured on ClaudeTerminal (189 files, 41k lines): 0:13 preparing, 0:27 layout, 0:18 writing, ~4.5 GB peak memory
+- Parts mode (`parts.py`): WeasyPrint keeps all pages in memory until writing (~0.6 GB + ~6.5 MB/page), so documents over `2 × $CODE2PDF_PART_PAGES` (default 100) estimated pages are split into parts of whole files, each rendered by `render_part` in a spawned child (headers/footers off, contents page off). The parent then renders the contents page with written-in numbers (`build_contents(page_numbers=...)`, links `code2pdf:f<i>`), renders an overlay of empty pages carrying headers/footers (`theme.overlay_css`), and joins with pypdf: `add_page` (not `append`, which imports one named destination per code line: 10× slower, 6× bigger), `merge_page` + `compress_content_streams`, link rewiring to `/Dest`, outline, metadata. `-j/--jobs`/`$CODE2PDF_JOBS` (default 2). ClaudeTerminal 563 pages: 1 job 52 s/1.9 GB, 2 jobs 30 s/3.1 GB, 3 jobs 23 s/3.7 GB; single pass 54 s/4.2 GB. `$CODE2PDF_DEBUG_TIMING` prints per-stage timings
 - One block per code line costs ~60% more render time than the v3.3 markup (7.8 s vs 4.9 s for this repo); it is what makes wrapped lines hang cleanly
 
 ### code2txt (`bin/code2txt`)
@@ -82,7 +84,7 @@ The project consists of:
 ## Key Technical Details
 
 **Dependencies** (Ghostscript and jq are no longer needed):
-- Python 3 with packages: pygments (syntax highlighting), weasyprint (HTML→PDF)
+- Python 3 with packages: pygments (syntax highlighting), weasyprint (HTML→PDF), pypdf (joining parts)
 
 **Font Support**:
 - Latin text uses the bundled IBM Plex fonts; Chinese/Japanese/Korean comes from system fonts
@@ -295,12 +297,13 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ## Testing
 
 ### Test Suite Overview
-- **85 automated tests** covering both tools
+- **94 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
   - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
   - code2pdf: 10 unit tests (`test_code2pdf.py`)
-  - Launchers: 9 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies, `--theme`, `--list-themes`, default selection
+  - Launchers: 10 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies, `--theme`, `--list-themes`, default selection, `--jobs`
+  - Parts: 8 tests (`test_parts.py`): partitioning, joined output text-identical to single pass, contents links and bookmarks, headers/footers on every page, metadata, no leftovers
   - Directory conversion: 4 tests (`test_print_all_tmp.py`): `/tmp` isolation, missing directory
   - One-pass renderer: 12 tests (`test_dir_to_pdf.py`): filter parity with the old bash rules, table of contents first with correct page numbers, relative headers, no Ghostscript needed
   - Design: 17 tests (`test_design.py`): themes, embedded Plex fonts, `#!` language detection, git/mtime dates, printing date, grouped contents page, single-file design
@@ -339,6 +342,7 @@ scripts/
   print_all.sh                  # Directory conversion entry point (wraps dir_to_pdf.py)
   theme.py                      # Themes, bundled fonts, page CSS
   progress.py                   # Page estimate and progress display
+  parts.py                      # Render big documents in parts and join them
   dir_to_pdf.py                 # One-pass directory → PDF renderer with table of contents
   combine_to_txt.sh             # Text combination script
   setup_cjk_fonts.sh            # CJK font installation script
