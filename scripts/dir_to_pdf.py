@@ -190,6 +190,48 @@ def printed_at():
     return datetime.datetime.now().astimezone()
 
 
+# One probe character per script: if no installed font has it, that script prints as empty boxes
+CJK_SCRIPTS = [
+    ("Chinese", "4e2d", ((0x4E00, 0x9FFF), (0x3400, 0x4DBF), (0xF900, 0xFAFF))),  # 中
+    ("Japanese", "3042", ((0x3040, 0x30FF), (0x31F0, 0x31FF))),                  # あ
+    ("Korean", "d55c", ((0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F))),  # 한
+]
+
+
+def missing_cjk_fonts(texts, fc_list="auto"):
+    """Scripts (Chinese/Japanese/Korean) that occur in TEXTS but that no installed font covers,
+    according to fontconfig's fc-list. Returns [] when fc-list is unavailable (can't tell)."""
+    if fc_list == "auto":
+        import shutil
+        fc_list = shutil.which("fc-list")
+    present = []
+    for name, probe, ranges in CJK_SCRIPTS:
+        if any(lo <= ord(ch) <= hi for text in texts for ch in text if ord(ch) >= 0x1100 for lo, hi in ranges):
+            present.append((name, probe))
+    if not present or not fc_list:
+        return []
+    missing = []
+    for name, probe in present:
+        try:
+            found = subprocess.run([fc_list, f":charset={probe}", "family"], capture_output=True, text=True,
+                                   timeout=20).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return []
+        if not found:
+            missing.append(name)
+    return missing
+
+
+def warn_missing_cjk_fonts(texts):
+    missing = missing_cjk_fonts(texts)
+    if missing:
+        setup = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_cjk_fonts.sh")
+        print(f"Warning: the files contain {'/'.join(missing)} text, but no installed font has those characters,\n"
+              f"  so they will print as empty boxes. Install a CJK font, then convert again:\n"
+              f"    without sudo: {setup}   (~26 MB, into ~/.local/share/fonts)\n"
+              f"    with sudo:    sudo apt install fonts-noto-cjk", file=sys.stderr)
+
+
 def count_lines(source):
     return source.count("\n") + (1 if source and not source.endswith("\n") else 0)
 
@@ -324,6 +366,7 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
 
     theme = themes.resolve_theme(theme_name)
     sources = {path: read_source(path) for _, path in entries}
+    warn_missing_cjk_fonts(list(sources.values()) + [rel for rel, _ in entries])
     progress = progress_report.Progress(
         sys.stderr, files=len(entries), lines=sum(count_lines(text) for text in sources.values()),
         estimated_pages=progress_report.estimate_pages(list(sources.values()), contents=contents), quiet=quiet)

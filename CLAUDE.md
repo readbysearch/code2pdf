@@ -89,7 +89,9 @@ The project consists of:
 **Font Support**:
 - Latin text uses the bundled IBM Plex fonts; Chinese/Japanese/Korean comes from system fonts
 - macOS: no setup needed; Pango falls back to system CJK fonts (PingFang, Hiragino, Apple SD Gothic/Nanum)
-- Linux: install `fonts-noto-cjk`, or run `setup_cjk_fonts.sh` (installs to `~/.local/share/fonts/noto-cjk/`)
+- Linux: install `fonts-noto-cjk`, or run `setup_cjk_fonts.sh` (no sudo; downloads Noto Sans Mono CJK Regular/Bold, ~26 MB, into `~/.local/share/fonts/noto-cjk/`; needs curl or wget and python3/unzip/bsdtar; uses `venv/bin` tools too, so it works for conda-forge installs)
+- Missing CJK fonts are detected before converting (`missing_cjk_fonts`: one `fc-list :charset=<probe>` per script that occurs: 中 3042 한) and reported with the fix; without such a font the PDF still extracts correct text but shows empty boxes, so text-based tests can't catch it
+- Code text prefers monospace CJK fonts (`CJK_MONO_FALLBACK`: Noto Sans Mono CJK first), titles use proportional ones
 - **Installation guide**: See `docs/font_installation_guide.md`
 - **Quick setup**: Run `./scripts/setup_cjk_fonts.sh [sc|tc|jp|kr|all]`
 
@@ -300,7 +302,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ## Testing
 
 ### Test Suite Overview
-- **101 automated tests** covering both tools
+- **108 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
   - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
@@ -311,6 +313,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
   - One-pass renderer: 12 tests (`test_dir_to_pdf.py`): filter parity with the old bash rules, table of contents first with correct page numbers, relative headers, no Ghostscript needed
   - Design: 17 tests (`test_design.py`): themes, embedded Plex fonts, `#!` language detection, git/mtime dates, printing date, grouped contents page, single-file design
   - Progress: 8 tests (`test_progress.py`): page estimate, terminal vs log output, ticking silent stages, time left, quiet
+  - CJK fonts: 6 tests (`test_cjk_fonts.py`): missing-font detection per script with a fake `fc-list`, warning text
   - Integration: 8 tests (`test_integration.py`)
 - code2pdf tests need Pygments and WeasyPrint in `.venv/` (see Running Automated Tests); they skip or fail without them
 - **Test fixtures**: Sample projects and edge cases in `tests/fixtures/`
