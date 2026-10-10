@@ -64,7 +64,9 @@ curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.s
 The script copies the tools to `~/.local/share/code2pdf` (or `/usr/local/share/code2pdf`),
 creates a private Python environment there with Pygments, WeasyPrint and pypdf, links the
 commands into `~/.local/bin` (or `/usr/local/bin`), and verifies the install by converting a
-test file. Re-run it to upgrade; `--ref v3.6` installs a specific release.
+test file. It installs the **latest release**; `--ref v3.6` installs a specific one and `--ref main`
+the newest, unreleased code. Re-run it to upgrade. It only adds `~/.local/bin` to your PATH if no
+shell file does so already (Ubuntu's `~/.profile` does).
 
 **No sudo?** `--user` needs no root at all. If `python3-venv` is missing it bootstraps pip
 itself (~100 MB). If the Pango library or Python is missing, it downloads
