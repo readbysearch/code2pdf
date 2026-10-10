@@ -122,3 +122,21 @@ def test_unknown_theme_is_reported(linked_bin, temp_dir):
     result = run([str(linked_bin / "code2pdf"), "--theme", "nope", "-s", "a.py"], temp_dir)
     assert result.returncode != 0
     assert "unknown theme" in (result.stdout + result.stderr).lower()
+
+
+def test_default_selection_covers_common_languages_and_skips_build_output(linked_bin, temp_dir):
+    """Defaults used to skip Swift/Go/Rust/... and include build/, so e.g. a Swift app printed
+    mostly SwiftPM checkouts from build/ and none of its own sources."""
+    project = temp_dir / "app"
+    sources = ["App/Main.swift", "App/Bridge.m", "cmd/main.go", "src/lib.rs", "android/Main.kt",
+               "web/App.tsx", "web/app.css", "config.yaml", "pyproject.toml", "README.md"]
+    skipped = ["build/SourcePackages/checkouts/Lib/Lib.swift", "DerivedData/x.swift", "target/debug/x.rs",
+               "vendor/lib.go", "Pods/A/A.m", "__pycache__/x.py", "venv/lib/site.py",
+               "package-lock.json"]
+    for rel in sources + skipped:
+        path = project / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x\n")
+    result = run([str(linked_bin / "code2pdf"), "-a", str(project), "--list-files"], temp_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert sorted(result.stdout.split()) == sorted(sources)

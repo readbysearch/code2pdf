@@ -223,12 +223,13 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ## File Processing Logic
 
 ### code2pdf Default Filtering Rules
-- **Blacklisted folders**: `node_modules`, `.git`, `dist`, `out`
+- **Blacklisted folders**: `node_modules`, `.git`, `dist`, `out`, `build`, `target`, `DerivedData`, `Pods`, `vendor`, `__pycache__`, `venv` (hidden folders are always skipped)
 - **Blacklisted patterns**: `env*`
-- **Whitelisted extensions**: `rb`, `sh`, `md`, `js`, `py`, `ts`, `java`, `cpp`, `h`, `c`, `html`
+- **Whitelisted extensions**: C family (`c h cc cpp cxx hh hpp m mm`), `swift go rs zig`, JVM (`java kt kts scala groovy gradle`), `cs fs`, scripting (`py rb php pl lua r jl dart ex exs erl hs ml clj`), web (`js mjs cjs jsx ts tsx vue svelte html css scss`), `sql proto graphql`, shells (`sh bash zsh fish ps1`), docs/config (`md rst yaml yml toml`). JSON is left out on purpose (lockfiles).
 - **Whitelisted filenames**: `README`, `LICENSE`, `Makefile`, `launch.json`
 - **Include files without extensions**: `true` (for Dockerfile, etc.)
-- **Additional parameters**: `--ignore-files`, `--ignore-types`, `--ignore-folders`, `--include-types`
+- **Additional parameters**: `--ignore-files`, `--ignore-types`, `--ignore-folders`, `--include-types`; `--list-files` shows the selection without converting
+- Defaults live in `bin/code2pdf` (`DEFAULT_*`); tests: `test_default_selection_covers_common_languages_and_skips_build_output`
 
 ### code2txt Default Filtering Rules
 - **Ignored extensions**: `bin`, `pdf`, `jpg`, `png`, `gif`, `zip`, `tar`, `gz`, `exe`, `dll`, `so`, `dylib`, `class`, `jar`, `war`, `ear`, `pyc`, `pyo`, `txt`
@@ -294,12 +295,12 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ## Testing
 
 ### Test Suite Overview
-- **84 automated tests** covering both tools
+- **85 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
   - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
   - code2pdf: 10 unit tests (`test_code2pdf.py`)
-  - Launchers: 8 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies, `--theme`, `--list-themes`
+  - Launchers: 9 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies, `--theme`, `--list-themes`, default selection
   - Directory conversion: 4 tests (`test_print_all_tmp.py`): `/tmp` isolation, missing directory
   - One-pass renderer: 12 tests (`test_dir_to_pdf.py`): filter parity with the old bash rules, table of contents first with correct page numbers, relative headers, no Ghostscript needed
   - Design: 17 tests (`test_design.py`): themes, embedded Plex fonts, `#!` language detection, git/mtime dates, printing date, grouped contents page, single-file design

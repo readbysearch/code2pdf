@@ -7,6 +7,7 @@
 #   3 BLACKLISTED_FOLDERS_JSON  4 BLACKLISTED_FOLDER_PATTERN
 #   5 WHITELISTED_FILE_EXTENSIONS_JSON  6 WHITELISTED_FILE_NAMES_JSON
 #   7 INCLUDE_NO_EXTENSION  8 IGNORE_FILES  9 IGNORE_TYPES  10 IGNORE_FOLDERS  11 INCLUDE_TYPES
+#   12... extra options for dir_to_pdf.py (e.g. --list-files)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -14,4 +15,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR=$(cd "${1:-.}" 2>/dev/null && pwd) || { echo "Error: directory not found: ${1:-.}" >&2; exit 1; }
 
 exec python3 "$SCRIPT_DIR/dir_to_pdf.py" "$ROOT_DIR" "$ROOT_DIR/merged.pdf" \
-    "$3" "$4" "$5" "$6" "${7:-true}" "${8:-}" "${9:-}" "${10:-}" "${11:-}"
+    "$3" "$4" "$5" "$6" "${7:-true}" "${8:-}" "${9:-}" "${10:-}" "${11:-}" "${@:12}"
