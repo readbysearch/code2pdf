@@ -45,7 +45,9 @@ for _case in real_cases.REAL_CASES:
     _case["set"] = "real"
 for _case in real_cases.SCALE_CASES:
     _case["set"] = "scale"
-CASES = FIXTURE_CASES + real_cases.REAL_CASES + real_cases.SCALE_CASES
+for _case in real_cases.JUDGEMENT_CASES:
+    _case["set"] = "judgement"
+CASES = FIXTURE_CASES + real_cases.REAL_CASES + real_cases.SCALE_CASES + real_cases.JUDGEMENT_CASES
 BY_ID = {case["id"]: case for case in CASES}
 
 RESULTS = os.path.join(HERE, "results")
@@ -207,10 +209,31 @@ def add_converted_folder(got, expected):
     return [best + g for g in got]
 
 
+def _ignorable(path):
+    """Bytecode caches written by an agent inspecting Python code (gitignored in practice)."""
+    return "__pycache__/" in path or path.endswith((".pyc", ".pyo"))
+
+
+def regrade(record, case):
+    """Apply the current grader to a stored run (its file list and project changes are saved)."""
+    r = dict(record)
+    r["project_changed"] = [p for p in r.get("project_changed", []) if not _ignorable(p)]
+    if "got" in r and not callable(case["expected"]) or case.get("set") == "judgement":
+        expected = case["expected"](None) if callable(case["expected"]) else case["expected"]
+        got = r.get("got", [])
+        r["missing"] = sorted(set(expected) - set(got))
+        r["extra"] = sorted(set(got) - set(expected) - set(case.get("allowed", [])))
+        r["files_ok"] = bool(r["pdf"]) and not r["missing"] and not r["extra"] and len(got) == len(set(got))
+    r["pass"] = bool(r["pdf"] and r.get("files_ok") and r.get("order_ok") is not False
+                     and not r["project_changed"])
+    return r
+
+
 def grade(case, output, before, after, tool="code2pdf"):
     result = {"pdf": os.path.exists(output), "missing": [], "extra": [], "order_ok": None,
-              "project_changed": sorted(set(before) ^ set(after)
-                                        | {p for p in before if p in after and before[p] != after[p]})}
+              "project_changed": sorted(p for p in set(before) ^ set(after)
+                                        | {p for p in before if p in after and before[p] != after[p]}
+                                        if not _ignorable(p))}
     if result["pdf"]:
         try:
             got = txt_files(output) if tool == "code2txt" else pdf_files(output)
@@ -220,10 +243,11 @@ def grade(case, output, before, after, tool="code2pdf"):
         if case.get("match") == "basename":
             got = [os.path.basename(g) for g in got]
         else:
-            got = add_converted_folder(got, expected)
+            got = add_converted_folder(got, expected + list(case.get("allowed", [])))
         result["got"] = got
         result["missing"] = sorted(set(expected) - set(got))
-        result["extra"] = sorted(set(got) - set(expected))
+        # Judgement cases accept defensible extras; anything else is wrong
+        result["extra"] = sorted(set(got) - set(expected) - set(case.get("allowed", [])))
         duplicates = len(got) != len(set(got))
         result["order_ok"] = got == expected if case.get("ordered") else None
         result["files_ok"] = not result["missing"] and not result["extra"] and not duplicates
@@ -469,7 +493,8 @@ def load(label):
             tool = json.load(f).get("tool") or "code2pdf"
     with open(os.path.join(RESULTS, label, "runs.jsonl")) as f:
         runs = [json.loads(line) for line in f if line.strip()]
-    return [r for r in runs if r["case"] not in BY_ID or applies(BY_ID[r["case"]], tool)]
+    return [regrade(r, BY_ID[r["case"]]) for r in runs
+            if r["case"] in BY_ID and applies(BY_ID[r["case"]], tool)]
 
 
 def bootstrap_ci(runs, n=4000, seed=1):
