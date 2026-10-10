@@ -10,6 +10,7 @@ MAX_FILE_SIZE="500K"
 NO_TOC=false
 VERBOSE=false
 TARGET_DIR=""
+FILES_FROM=""
 
 # Resolve the install directory (the parent of this script's real bin/ dir), following symlinks;
 # CODE2PDF_HOME overrides it (used by the Homebrew formula)
@@ -45,6 +46,9 @@ Options:
   --include-types LIST   Only include these file types (overrides ignore-types)
   --max-file-size SIZE   Skip files larger than this (e.g., 500K, 1M, 10M)
                          (default: 500K)
+  --files-from FILE      Use exactly the files listed in FILE, one per line, in that order
+                         (- reads stdin; paths relative to DIRECTORY or absolute; the
+                         filters above don't apply, binary files are skipped)
   --no-toc               Skip table of contents generation
   --verbose              Show processing details
   -V, --version          Show the version and how it is installed
@@ -57,6 +61,7 @@ Examples:
   code2txt --include-types js,ts     # Only include JavaScript and TypeScript files
   code2txt --ignore-files package-lock.json,yarn.lock  # Ignore specific files
   code2txt --max-file-size 1M        # Skip files larger than 1MB
+  git ls-files src | code2txt --files-from - -o src.md   # Exactly these files, in this order
   code2txt --no-toc --verbose src/   # Verbose output without table of contents
 
 EOF
@@ -87,6 +92,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --max-file-size)
             MAX_FILE_SIZE="$2"
+            shift 2
+            ;;
+        --files-from)
+            if [ $# -lt 2 ] || [ -z "$2" ]; then
+                echo "Error: --files-from needs a value (a file, or - for stdin)" >&2
+                exit 1
+            fi
+            FILES_FROM="$2"
             shift 2
             ;;
         --no-toc)
@@ -163,7 +176,8 @@ fi
     "$INCLUDE_TYPES" \
     "$MAX_FILE_SIZE" \
     "$NO_TOC" \
-    "$VERBOSE"
+    "$VERBOSE" \
+    "$FILES_FROM"
 
 exit_code=$?
 

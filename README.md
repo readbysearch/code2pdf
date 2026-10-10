@@ -141,7 +141,7 @@ code2pdf -a src -o ~/Desktop/src.pdf               # choose where the PDF goes
 |--------|--------|
 | `--exclude GLOB` | Leave out matching files and folders. Wins over everything else. |
 | `--include GLOB` | Also include matching files of any type, even hidden ones or ones in skipped folders. A folder (`--include config`) brings every file in it. |
-| `--files-from FILE` | Convert exactly the files listed in `FILE` (`-` for stdin), one per line, in that order: relative to the directory (default `.`) or absolute. Only `--exclude`/`--ignore-*` and the binary check apply. |
+| `--files-from FILE` | Convert exactly the files listed in `FILE` (`-` for stdin), one per line, in that order: relative to the directory (default `.`) or absolute. Only `--exclude` and the binary check apply. |
 | `--include-types LIST` | Only these extensions (replaces the default list). |
 | `--ignore-types LIST` | Skip these extensions. |
 | `--ignore-folders LIST` | Skip folders with these names, at any depth. |
@@ -273,6 +273,7 @@ code2txt --help
 | `--no-toc` | Skip table of contents generation | false |
 | `--verbose` | Show processing details | false |
 | `--ignore-files` | Specific file names to skip (comma-separated) | - |
+| `--files-from FILE` | Use exactly the files listed in `FILE` (`-` for stdin), in that order; the filters don't apply, binary files are skipped | - |
 | `-V, --version` | Show the version and how it is installed | - |
 
 ## Fonts

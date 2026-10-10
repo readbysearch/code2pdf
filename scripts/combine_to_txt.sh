@@ -10,6 +10,7 @@ INCLUDE_TYPES="$6"
 MAX_FILE_SIZE="$7"
 NO_TOC="$8"
 VERBOSE="$9"
+FILES_FROM="${10:-}"   # a file listing the files to use, in order, or - for stdin
 
 # Track visited directories to prevent symbolic link recursion
 declare -a visited_dirs=()
@@ -202,6 +203,73 @@ process_directory() {
     done
 }
 
+# True if FILE has a NUL byte in its first 8 KB (images, archives, fonts)
+is_binary() {
+    local total kept
+    total=$(head -c 8192 "$1" | wc -c)
+    kept=$(head -c 8192 "$1" | tr -d '\000' | wc -c)
+    [ "$total" -ne "$kept" ]
+}
+
+# --files-from: exactly the listed files, in the listed order. Paths are relative to TARGET_DIR
+# (or to the current folder), or absolute; they must be inside TARGET_DIR. Binary files are
+# skipped; missing files are errors. Sets sorted_files.
+read_file_list() {
+    local source="$1" line path real rel seen=$'\n'
+    local -a problems=() binaries=()
+    local target_real
+    target_real="$(cd "$TARGET_DIR" && pwd -P)"
+    sorted_files=()
+    if [ "$source" = "-" ]; then
+        exec 3<&0
+    elif ! exec 3<"$source"; then
+        echo "Error: cannot read --files-from $source" >&2
+        return 1
+    fi
+    while IFS= read -r line <&3 || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [ -z "$line" ] && continue
+        case "$line" in
+            /*) path="$line" ;;
+            *) path="$TARGET_DIR/$line"
+               if [ ! -e "$path" ] && [ -e "$line" ]; then path="$PWD/$line"; fi ;;
+        esac
+        if [ ! -f "$path" ]; then
+            problems+=("not a file: $line")
+            continue
+        fi
+        real="$(cd "$(dirname "$path")" && pwd -P)/$(basename "$path")"
+        case "$real" in
+            "$target_real"/*) rel="${real#"$target_real"/}" ;;
+            *) problems+=("outside $TARGET_DIR: $line"); continue ;;
+        esac
+        case "$seen" in *$'\n'"$rel"$'\n'*) continue ;; esac
+        seen="$seen$rel"$'\n'
+        [ "$real" = "$OUTPUT_REAL" ] && continue
+        if is_binary "$path"; then
+            binaries+=("$rel")
+            continue
+        fi
+        sorted_files+=("$rel")
+    done
+    exec 3<&-
+    if [ ${#binaries[@]} -gt 0 ]; then
+        local shown="${binaries[0]}" i
+        for ((i = 1; i < ${#binaries[@]} && i < 3; i++)); do shown="$shown, ${binaries[$i]}"; done
+        [ ${#binaries[@]} -gt 3 ] && shown="$shown, …"
+        local noun="files"
+        [ ${#binaries[@]} -eq 1 ] && noun="file"
+        echo "Skipped ${#binaries[@]} binary $noun: $shown" >&2
+    fi
+    if [ ${#problems[@]} -gt 0 ]; then
+        local p
+        for p in "${problems[@]}"; do echo "Error: --files-from: $p" >&2; done
+        return 1
+    fi
+}
+
 # Function to write file content with markdown formatting
 write_file_content() {
     local file="$1"
@@ -227,12 +295,16 @@ main() {
     
     [ "$VERBOSE" = true ] && echo "Starting to process directory: $TARGET_DIR" >&2
     
-    # Process the directory tree
-    process_directory "$TARGET_DIR"
-    
-    # Sort the processed files for consistent output
-    IFS=$'\n' sorted_files=($(sort <<<"${processed_files[*]}"))
-    unset IFS
+    if [ -n "$FILES_FROM" ]; then
+        read_file_list "$FILES_FROM" || return 1
+    else
+        # Process the directory tree
+        process_directory "$TARGET_DIR"
+
+        # Sort the processed files for consistent output
+        IFS=$'\n' sorted_files=($(sort <<<"${processed_files[*]}"))
+        unset IFS
+    fi
     
     # Generate table of contents if requested
     if [ "$NO_TOC" != true ] && [ ${#sorted_files[@]} -gt 0 ]; then
