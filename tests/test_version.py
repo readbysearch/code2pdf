@@ -52,6 +52,7 @@ def test_checkout_uses_git(version):
     ("venv", "install.sh"),
     ("conda", "install.sh (conda-forge environment)"),
     ("git", "git checkout"),
+    ("tree", "source tree"),
 ])
 def test_install_kind(version, temp_dir, layout, expected):
     base = {"Cellar": temp_dir / "opt/homebrew/Cellar/code2pdf/3.6", "usr-share": Path("/usr/share/code2pdf")}.get(layout, temp_dir / "inst")
@@ -61,6 +62,9 @@ def test_install_kind(version, temp_dir, layout, expected):
         (base / "venv/conda-meta").mkdir(parents=True)
     if layout == "git":
         (base / ".git").mkdir(parents=True)
+    if layout == "tree":
+        (base / "bin").mkdir(parents=True)
+        (base / "scripts").mkdir()
     assert version.install_kind(str(base)) == expected
 
 
@@ -71,7 +75,8 @@ def test_launchers_print_version(temp_dir):
         assert result.returncode == 0, result.stderr
         first = result.stdout.splitlines()[0]
         assert re.match(rf"{cmd} \S+.* \(commit [0-9a-f]{{7,}}, \d{{4}}-\d\d-\d\d\)$", first), first
-        assert "installed: git checkout" in result.stdout
+        kind = "git checkout" if (PROJECT_ROOT / ".git").is_dir() else "source tree"  # CI may check out a tarball
+        assert f"installed: {kind}" in result.stdout
     pdf = subprocess.run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-V"], capture_output=True, text=True, timeout=60).stdout
     assert re.search(r"python \d+\.\d+.*weasyprint", pdf)
     assert "CJK font:" in pdf
@@ -79,7 +84,12 @@ def test_launchers_print_version(temp_dir):
 
 def test_version_works_without_pdf_dependencies(temp_dir):
     """--version must help debug a broken install, so it can't require WeasyPrint."""
-    env = {"HOME": os.environ["HOME"], "PATH": "/usr/bin:/bin"}
+    # A python3 that can't see site/dist-packages, i.e. has no WeasyPrint even where it is installed system-wide
+    shim = temp_dir / "shim"
+    shim.mkdir()
+    (shim / "python3").write_text('#!/bin/sh\nexec /usr/bin/python3 -S "$@"\n')
+    (shim / "python3").chmod(0o755)
+    env = {"HOME": os.environ["HOME"], "PATH": f"{shim}:/usr/bin:/bin"}
     link = temp_dir / "code2pdf"
     link.symlink_to(PROJECT_ROOT / "bin" / "code2pdf")
     fake_home = temp_dir / "home"

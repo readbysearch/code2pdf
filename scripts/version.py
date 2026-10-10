@@ -74,6 +74,8 @@ def install_kind(install_dir=INSTALL_DIR):
         return "install.sh"
     if os.path.isdir(os.path.join(path, ".git")):
         return "git checkout"
+    if os.path.isdir(os.path.join(path, "bin")) and os.path.isdir(os.path.join(path, "scripts")):
+        return "source tree"  # e.g. an unpacked GitHub tarball, run in place
     return "unknown"
 
 
