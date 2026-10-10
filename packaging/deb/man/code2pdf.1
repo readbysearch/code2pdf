@@ -1,0 +1,95 @@
+.TH CODE2PDF 1 "2026" "code2pdf" "User Commands"
+.SH NAME
+code2pdf \- print source code to PDF with a contents page and CJK support
+.SH SYNOPSIS
+.B code2pdf
+.B \-s
+.I FILE
+[\fIOPTIONS\fR]
+.br
+.B code2pdf
+.B \-a
+.I DIR
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B code2pdf
+converts one file, or every selected source file under a directory, into a PDF with
+syntax highlighting, line numbers and bundled IBM Plex fonts.
+.PP
+With
+.BR \-a ,
+the result is
+.IR DIR/merged.pdf :
+a contents page grouped by folder with clickable page numbers and the printing date
+(and git commit), then each file on a new page with its language, line count and last
+change. Big directories are rendered in parts in separate processes to bound memory.
+.SH OPTIONS
+.TP
+.BI "\-s, \-\-single " FILE
+Convert one file to
+.I NAME.pdf
+in the current directory.
+.TP
+.BI "\-a, \-\-all " DIR
+Convert all selected files in
+.I DIR
+to
+.IR DIR/merged.pdf .
+.TP
+.BI \-\-include\-types " LIST"
+Only include these comma-separated extensions.
+.TP
+.BI \-\-ignore\-types " LIST"
+Skip these extensions.
+.TP
+.BI \-\-ignore\-folders " LIST"
+Skip these folder names (in addition to node_modules, build, dist, out, target, vendor, ...).
+.TP
+.BI \-\-ignore\-files " LIST"
+Skip these file names.
+.TP
+.B \-\-list\-files
+With
+.BR \-a :
+print the files that would be included, without converting.
+.TP
+.BI \-\-theme " NAME"
+.B paper
+(default, colour designed for print),
+.B mono
+(black and white), or any Pygments style.
+.TP
+.B \-\-list\-themes
+Print all theme names.
+.TP
+.BI "\-j, \-\-jobs " N
+Render big directories in
+.I N
+parts at a time (default 3 with 16 GB of RAM, 2 with 8 GB, else 1).
+.TP
+.B "\-q, \-\-quiet"
+No progress output.
+.TP
+.B "\-h, \-\-help"
+Show help.
+.SH ENVIRONMENT
+.TP
+.B CODE2PDF_THEME
+Default theme.
+.TP
+.B CODE2PDF_JOBS
+Default for
+.BR \-\-jobs .
+.TP
+.B SOURCE_DATE_EPOCH
+Fixed printing date, for reproducible output.
+.SH EXAMPLES
+.nf
+code2pdf \-a .
+code2pdf \-a src \-\-include\-types py,ts \-\-theme mono
+code2pdf \-s main.go
+.fi
+.SH SEE ALSO
+.BR code2txt (1)
+.PP
+https://github.com/readbysearch/code2pdf

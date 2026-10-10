@@ -195,7 +195,8 @@ section.file .meta {{ color: {p.graphite}; font-size: 8pt; }}
 
 /* Code: line numbers in the margin; wrapped lines hang under the code */
 .highlight pre {{ margin: 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; counter-reset: line; }}
-.highlight pre > span[id] {{ display: block; position: relative; padding-left: calc(9mm + 2em); text-indent: -2em;
+/* 15mm = 9mm gutter + 6mm (2em at 8.5pt) hang; plain lengths because WeasyPrint < 62 ignores calc() here */
+.highlight pre > span[id] {{ display: block; position: relative; padding-left: 15mm; text-indent: -6mm;
                              counter-increment: line; }}
 .highlight pre > span[id]::before {{ content: counter(line); position: absolute; left: 0; width: 6mm; text-indent: 0;
     text-align: right; color: {theme.line_number_color}; font-size: 7pt; line-height: 1.75;

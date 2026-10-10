@@ -32,6 +32,7 @@ SYSTEM_INSTALL=false
 FORCE=false
 SOURCE_DIR=""
 REF="main"
+USE_CONDA=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -56,6 +57,10 @@ while [[ $# -gt 0 ]]; do
             REF="$2"
             shift 2
             ;;
+        --conda)
+            USE_CONDA=true
+            shift
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -65,6 +70,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --force      Skip confirmations"
             echo "  --from DIR   Install from a local checkout instead of downloading"
             echo "  --ref REF    Branch or tag to download (default: main)"
+            echo "  --conda      Get Python, WeasyPrint and Pango from conda-forge (no system packages needed)"
             echo "  -h, --help   Show this help message"
             echo ""
             exit 0
@@ -108,6 +114,11 @@ detect_system() {
 
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
         OS="linux"
+        if [[ -r /etc/os-release ]] && . /etc/os-release && [[ "${ID:-}" == "ubuntu" && "${VERSION_ID%%.*}" -ge 24 ]]; then
+            print_info "On Ubuntu ${VERSION_ID}, the .deb package is simpler (dependencies come from apt):"
+            echo "  curl -LO https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf_all.deb"
+            echo "  sudo apt install ./code2pdf_all.deb"
+        fi
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         OS="macos"
         print_warning "On macOS, Homebrew is the recommended install:"
@@ -133,20 +144,78 @@ check_dependencies() {
     if ! command_exists "tar"; then
         missing+=("tar")
     fi
-    if ! command_exists "python3" || ! python3 -m venv --help >/dev/null 2>&1; then
-        missing+=("python3 (with venv)")
-    fi
-
     if [[ ${#missing[@]} -ne 0 ]]; then
         print_error "Missing required dependencies: ${missing[*]}"
         echo "Install them first:"
-        echo "  Ubuntu/Debian: sudo apt install curl python3-venv libpango-1.0-0 libpangoft2-1.0-0"
-        echo "  Fedora/RHEL:   sudo dnf install curl python3 pango"
+        echo "  Ubuntu/Debian: sudo apt install curl tar"
         echo "  macOS:         brew install readbysearch/tap/code2pdf  (installs everything)"
         exit 1
     fi
 
-    print_success "All dependencies are available!"
+    # Python is not strictly required: without a usable one (or without Pango), the installer
+    # falls back to conda-forge, which needs no system packages and no sudo.
+    if command_exists "python3"; then
+        local venv_note="venv ready"
+        python3 -c "import ensurepip" 2>/dev/null || venv_note="no ensurepip (python3-venv); pip will be bootstrapped"
+        print_info "Python: $(python3 -c 'import sys; print(sys.version.split()[0])') ($venv_note)"
+    else
+        print_info "Python: not found; Python will come from conda-forge"
+    fi
+    print_success "Dependencies checked"
+}
+
+# Download URL to FILE with curl or wget
+download() {
+    if command_exists "curl"; then
+        curl -fsSL "$1" -o "$2"
+    else
+        wget -q "$1" -O "$2"
+    fi
+}
+
+# Private environment from the system python3, without sudo even if python3-venv is missing
+create_system_env() {
+    local env="$1"
+    command_exists "python3" || return 1
+    if python3 -c "import ensurepip" 2>/dev/null; then
+        $SUDO python3 -m venv "$env" || return 1
+    else
+        print_info "python3-venv is not installed; creating the environment without it and bootstrapping pip"
+        $SUDO python3 -m venv --without-pip "$env" || return 1
+        local get_pip
+        get_pip="$(mktemp)"
+        download "https://bootstrap.pypa.io/get-pip.py" "$get_pip" || { rm -f "$get_pip"; return 1; }
+        $SUDO "$env/bin/python3" "$get_pip" --quiet --disable-pip-version-check || { rm -f "$get_pip"; return 1; }
+        rm -f "$get_pip"
+    fi
+    $SUDO "$env/bin/python3" -m pip install --quiet --disable-pip-version-check -r "$SHARE_DIR/requirements.txt" || return 1
+    "$env/bin/python3" -c "import weasyprint" 2>/dev/null
+}
+
+# Private environment from conda-forge (Python + WeasyPrint + Pango), via a downloaded micromamba
+create_conda_env() {
+    local env="$1" platform
+    case "$(uname -s)-$(uname -m)" in
+        Linux-x86_64) platform="linux-64" ;;
+        Linux-aarch64|Linux-arm64) platform="linux-aarch64" ;;
+        Linux-ppc64le) platform="linux-ppc64le" ;;
+        Darwin-arm64) platform="osx-arm64" ;;
+        Darwin-x86_64) platform="osx-64" ;;
+        *) print_error "No conda-forge build for $(uname -s) $(uname -m)"; return 1 ;;
+    esac
+    local mamba_dir="$SHARE_DIR/.micromamba"
+    print_info "Getting Python, WeasyPrint and Pango from conda-forge (no system packages needed; ~400 MB)..."
+    $SUDO mkdir -p "$mamba_dir"
+    download "https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-$platform" "$mamba_dir/micromamba.tmp" \
+        || { print_error "Could not download micromamba"; return 1; }
+    $SUDO mv "$mamba_dir/micromamba.tmp" "$mamba_dir/micromamba"
+    $SUDO chmod +x "$mamba_dir/micromamba"
+    $SUDO rm -rf "$env"
+    $SUDO env MAMBA_ROOT_PREFIX="$mamba_dir" "$mamba_dir/micromamba" create --yes --quiet --prefix "$env" \
+        --override-channels -c conda-forge python pygments weasyprint pypdf >/dev/null || return 1
+    # The environment is self-contained; drop the package cache and micromamba itself
+    $SUDO rm -rf "$mamba_dir"
+    "$env/bin/python3" -c "import weasyprint" 2>/dev/null
 }
 
 # Determine install directories
@@ -228,20 +297,35 @@ install_tools() {
     $SUDO cp -R "$SRC/bin" "$SRC/scripts" "$SRC/config" "$SRC/fonts" "$SRC/requirements.txt" "$SHARE_DIR/"
     $SUDO chmod +x "$SHARE_DIR"/bin/* "$SHARE_DIR"/scripts/*.sh
 
-    print_info "Creating Python environment with Pygments and WeasyPrint..."
-    $SUDO python3 -m venv "$SHARE_DIR/venv"
-    $SUDO "$SHARE_DIR/venv/bin/python3" -m pip install --quiet --disable-pip-version-check -r "$SHARE_DIR/requirements.txt"
+    print_info "Creating Python environment with Pygments, WeasyPrint and pypdf..."
+    local env="$SHARE_DIR/venv" env_ok=false
+    if [[ "$USE_CONDA" != true ]]; then
+        if create_system_env "$env" 2>"$SHARE_DIR/.install-errors.log"; then
+            env_ok=true
+        else
+            if command_exists "python3"; then
+                print_warning "The system Python can't run WeasyPrint here (most likely the Pango library is missing)."
+            fi
+            $SUDO rm -rf "$env"
+        fi
+    fi
+    if [[ "$env_ok" != true ]]; then
+        create_conda_env "$env" 2>>"$SHARE_DIR/.install-errors.log" && env_ok=true
+    fi
+    if [[ "$env_ok" == true ]]; then
+        $SUDO rm -f "$SHARE_DIR/.install-errors.log"
+    fi
 
     # The launchers find $SHARE_DIR by following these links
     for cmd in code2pdf code2txt; do
         $SUDO ln -sf "$SHARE_DIR/bin/$cmd" "$INSTALL_DIR/$cmd"
     done
 
-    if ! "$SHARE_DIR/venv/bin/python3" -c "import weasyprint" 2>/dev/null; then
-        print_error "WeasyPrint is installed but cannot load its system libraries (Pango)."
-        echo "  Ubuntu/Debian: sudo apt install libpango-1.0-0 libpangoft2-1.0-0"
-        echo "  Fedora/RHEL:   sudo dnf install pango"
-        echo "Then re-run this installer. code2txt works already; code2pdf needs Pango."
+    if [[ "$env_ok" != true ]]; then
+        print_error "Could not set up a Python environment for code2pdf (details: $SHARE_DIR/.install-errors.log)."
+        echo "code2txt works already. For code2pdf, either install the system packages"
+        echo "  Ubuntu/Debian: sudo apt install python3-venv libpango-1.0-0 libpangoft2-1.0-0"
+        echo "or check your network access to github.com and conda.anaconda.org, then re-run this installer."
         exit 1
     fi
 

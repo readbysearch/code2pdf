@@ -12,9 +12,11 @@ REPO_VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python3"
 
 
 def repo_venv_has_deps() -> bool:
-    if not REPO_VENV_PYTHON.exists():
+    """The launcher uses the checkout's .venv if there is one, else the system python3 (e.g. a .deb install)."""
+    python = REPO_VENV_PYTHON if REPO_VENV_PYTHON.exists() else Path("/usr/bin/python3")
+    if not python.exists():
         return False
-    return subprocess.run([str(REPO_VENV_PYTHON), "-c", "import pygments, weasyprint"],
+    return subprocess.run([str(python), "-c", "import pygments, weasyprint"],
                           capture_output=True).returncode == 0
 
 
