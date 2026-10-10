@@ -177,30 +177,6 @@ with 2 (3.1 GB), and ~52 s with 1 (1.9 GB); without parts it took 54 s and 4.2 G
 The joined PDF looks the same as a single-pass one (same text, pixels, contents links
 and bookmarks); it is ~25% bigger because each part embeds its own font subset.
 
-## Fonts
-
-code2pdf bundles [IBM Plex](https://github.com/IBM/plex) Mono and Sans (in `fonts/`, SIL Open Font
-License 1.1), so PDFs look the same on every machine. Plex has no Chinese, Japanese or Korean
-glyphs; those come from the system fonts.
-
-### CJK Font Support
-
-Chinese, Japanese and Korean text works out of the box on **macOS** — the system fonts
-(PingFang, Hiragino, Apple SD Gothic/Nanum) are used automatically.
-
-On **Linux**, a CJK font must be installed, or those characters print as empty boxes.
-code2pdf checks this and warns before and after converting (`install.sh --user` installs a
-font automatically when none is found). With sudo: `sudo apt install fonts-noto-cjk`
-(the `.deb` recommends it). **Without sudo**, the bundled script downloads Noto Sans Mono CJK
-(~26 MB; it covers Chinese, Japanese and Korean, in a monospace design that keeps code columns
-aligned) into `~/.local/share/fonts`:
-
-```bash
-~/.local/share/code2pdf/scripts/setup_cjk_fonts.sh      # sc (default), tc, hk, jp or kr glyph forms
-```
-
-**Full documentation**: [docs/font_installation_guide.md](docs/font_installation_guide.md)
-
 ### code2txt - Combine to Text File
 
 Process current directory with default settings:
@@ -254,6 +230,32 @@ code2txt --help
 | `--max-file-size` | Skip files larger than this (e.g., 500K, 1M) | `500K` |
 | `--no-toc` | Skip table of contents generation | false |
 | `--verbose` | Show processing details | false |
+| `--ignore-files` | Specific file names to skip (comma-separated) | - |
+| `-V, --version` | Show the version and how it is installed | - |
+
+## Fonts
+
+code2pdf bundles [IBM Plex](https://github.com/IBM/plex) Mono and Sans (in `fonts/`, SIL Open Font
+License 1.1), so PDFs look the same on every machine. Plex has no Chinese, Japanese or Korean
+glyphs; those come from the system fonts.
+
+### CJK Font Support
+
+Chinese, Japanese and Korean text works out of the box on **macOS** — the system fonts
+(PingFang, Hiragino, Apple SD Gothic/Nanum) are used automatically.
+
+On **Linux**, a CJK font must be installed, or those characters print as empty boxes.
+code2pdf checks this and warns before and after converting (`install.sh --user` installs a
+font automatically when none is found). With sudo: `sudo apt install fonts-noto-cjk`
+(the `.deb` recommends it). **Without sudo**, the bundled script downloads Noto Sans Mono CJK
+(~26 MB; it covers Chinese, Japanese and Korean, in a monospace design that keeps code columns
+aligned) into `~/.local/share/fonts`:
+
+```bash
+~/.local/share/code2pdf/scripts/setup_cjk_fonts.sh      # sc (default), tc, hk, jp or kr glyph forms
+```
+
+**Full documentation**: [docs/font_installation_guide.md](docs/font_installation_guide.md)
 
 ## Testing
 

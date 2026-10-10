@@ -1,266 +1,84 @@
-# CJK Font Installation Guide for code2pdf
+# CJK Fonts for code2pdf
 
-## Overview
+Latin text uses the IBM Plex fonts bundled with code2pdf. Plex has no Chinese, Japanese or
+Korean glyphs, so those characters come from fonts installed on the system. **Without a CJK font
+they print as empty boxes** (the text inside the PDF is still correct, so copy-paste works).
+code2pdf checks this and warns before and after converting, and `code2pdf --version` shows the
+CJK font it will use.
 
-This guide documents how to install CJK (Chinese/Japanese/Korean) fonts required for proper Unicode character rendering in code2pdf. Without these fonts, Chinese/Japanese/Korean characters will appear as boxes or fail to render.
+## macOS
 
-## Why Are CJK Fonts Needed?
+Nothing to install: PingFang, Hiragino and Apple SD Gothic/Nanum are used automatically.
 
-code2pdf uses WeasyPrint for PDF generation. Latin text uses the bundled IBM Plex fonts, which have no Chinese, Japanese or Korean glyphs, so those characters come from fonts installed on the system.
+## Linux
 
-> **Quick fix without sudo (Linux):** `~/.local/share/code2pdf/scripts/setup_cjk_fonts.sh` (or `scripts/setup_cjk_fonts.sh` in a checkout) downloads Noto Sans Mono CJK (~26 MB) into `~/.local/share/fonts`. code2pdf warns before converting when no installed font covers the Chinese/Japanese/Korean text it finds.
-
-> **macOS:** no installation needed. Pango falls back to the built-in CJK fonts (PingFang, Hiragino, Apple SD Gothic/Nanum) automatically. This guide is for **Linux**, where the simplest option is `sudo apt install fonts-noto-cjk` (Debian/Ubuntu) or `sudo dnf install google-noto-sans-cjk-fonts` (Fedora).
-
-## Quick Installation (Recommended)
-
-### For Simplified Chinese (简体中文)
+Pick one:
 
 ```bash
-# 1. Download Noto Sans CJK fonts
-cd /tmp
-wget https://github.com/googlefonts/noto-cjk/releases/download/Sans2.004/01_NotoSansCJK-OTF-VF.zip
+# With sudo (Debian/Ubuntu; the code2pdf .deb recommends it)
+sudo apt install fonts-noto-cjk
 
-# 2. Extract the package
-python3 -m zipfile -e 01_NotoSansCJK-OTF-VF.zip .
-
-# 3. Create font directory
-mkdir -p ~/.local/share/fonts/noto-cjk
-
-# 4. Install Simplified Chinese fonts
-cp Variable/OTF/Subset/NotoSansSC-VF.otf ~/.local/share/fonts/noto-cjk/
-cp Variable/OTF/Mono/NotoSansMonoCJKsc-VF.otf ~/.local/share/fonts/noto-cjk/
-
-# 5. Update font cache
-fc-cache -f ~/.local/share/fonts/noto-cjk/
-
-# 6. Verify installation
-fc-list | grep -i "noto.*cjk"
+# Without sudo: Noto Sans Mono CJK (~26 MB) into ~/.local/share/fonts
+~/.local/share/code2pdf/scripts/setup_cjk_fonts.sh        # or scripts/setup_cjk_fonts.sh in a checkout
+~/.local/share/code2pdf/scripts/setup_cjk_fonts.sh tc     # sc (default), tc, hk, jp or kr glyph forms
 ```
 
-**Disk space required**: ~30 MB
+`install.sh --user` runs `setup_cjk_fonts.sh` by itself when no CJK font is found (skip with
+`--no-cjk-fonts`). Every Noto CJK font covers Chinese, Japanese and Korean; the language only
+picks the regional glyph forms. The script needs curl or wget, and python3, unzip or bsdtar.
 
-### For Traditional Chinese (繁體中文)
-
-Replace step 4 with:
-```bash
-cp Variable/OTF/Subset/NotoSansTC-VF.otf ~/.local/share/fonts/noto-cjk/
-cp Variable/OTF/Mono/NotoSansMonoCJKtc-VF.otf ~/.local/share/fonts/noto-cjk/
-```
-
-### For Japanese (日本語)
-
-Replace step 4 with:
-```bash
-cp Variable/OTF/Subset/NotoSansJP-VF.otf ~/.local/share/fonts/noto-cjk/
-cp Variable/OTF/Mono/NotoSansMonoCJKjp-VF.otf ~/.local/share/fonts/noto-cjk/
-```
-
-### For Korean (한국어)
-
-Replace step 4 with:
-```bash
-cp Variable/OTF/Subset/NotoSansKR-VF.otf ~/.local/share/fonts/noto-cjk/
-cp Variable/OTF/Mono/NotoSansMonoCJKkr-VF.otf ~/.local/share/fonts/noto-cjk/
-```
-
-## Install All CJK Fonts (For Multi-Language Support)
-
-If you work with multiple CJK languages:
+## Check
 
 ```bash
-cd /tmp
-wget https://github.com/googlefonts/noto-cjk/releases/download/Sans2.004/01_NotoSansCJK-OTF-VF.zip
-python3 -m zipfile -e 01_NotoSansCJK-OTF-VF.zip .
-mkdir -p ~/.local/share/fonts/noto-cjk
-
-# Install all regional variants
-cp Variable/OTF/Subset/*.otf ~/.local/share/fonts/noto-cjk/
-cp Variable/OTF/Mono/*.otf ~/.local/share/fonts/noto-cjk/
-
-# Update font cache
-fc-cache -f ~/.local/share/fonts/noto-cjk/
+code2pdf --version                       # last line: "CJK font: Noto Sans Mono CJK SC"
+fc-list ":charset=4e2d" family           # fonts that contain 中
 ```
 
-**Disk space required**: ~150 MB
+Test rendering:
 
-## Verification
-
-### Check Font Installation
-
-```bash
-# List all installed Noto CJK fonts
-fc-list | grep -i "noto.*cjk"
-
-# Expected output should include:
-# - Noto Sans SC (Simplified Chinese)
-# - Noto Sans Mono CJK SC (Monospace)
-```
-
-### Test Chinese Character Rendering
-
-Create a test file:
 ```bash
 cat > /tmp/test_chinese.py << 'EOF'
 # 测试中文注释
-def 你好():
-    print("世界！")
+def hello():
+    print("你好，世界！")  # Hello World
 EOF
+code2pdf -s /tmp/test_chinese.py         # writes test_chinese.pdf in the current directory
 ```
 
-Convert to PDF:
-```bash
-code2pdf -s /tmp/test_chinese.py
-```
+## How code2pdf picks fonts
 
-Open the generated PDF and verify:
-- ✅ Chinese characters are clearly visible
-- ✅ Characters are not boxes/squares
-- ✅ Syntax highlighting is applied
+Set in `scripts/theme.py`:
 
-## Font Sources
+- **Code**: bundled IBM Plex Mono, then `CJK_MONO_FALLBACK`: Noto Sans Mono CJK SC/TC/JP/KR/HK
+  (monospace, so CJK keeps to the code columns), then `CJK_FALLBACK`.
+- **Titles, contents page, page headers**: bundled IBM Plex Sans, then `CJK_FALLBACK`:
+  PingFang SC, Hiragino Sans, Noto Sans CJK SC/JP/KR.
 
-### Noto Sans CJK
-
-- **Developer**: Google
-- **License**: SIL Open Font License 1.1 (free for commercial use)
-- **Download**: https://github.com/googlefonts/noto-cjk/releases
-- **Version Used**: Sans 2.004
-- **Coverage**: Complete CJK Unified Ideographs
-
-### Font Variants
-
-| Font Name | Purpose | File Size | Coverage |
-|-----------|---------|-----------|----------|
-| NotoSansSC-VF.otf | Simplified Chinese UI/text | 15 MB | GB18030 |
-| NotoSansTC-VF.otf | Traditional Chinese UI/text | 15 MB | Big5 |
-| NotoSansJP-VF.otf | Japanese UI/text | 15 MB | JIS X 0208 |
-| NotoSansKR-VF.otf | Korean UI/text | 15 MB | KS X 1001 |
-| NotoSansMonoCJKsc-VF.otf | Chinese monospace (code) | 15 MB | GB18030 |
-| NotoSansMonoCJKtc-VF.otf | Traditional Chinese monospace | 15 MB | Big5 |
-| NotoSansMonoCJKjp-VF.otf | Japanese monospace | 15 MB | JIS X 0208 |
-| NotoSansMonoCJKkr-VF.otf | Korean monospace | 15 MB | KS X 1001 |
-
-## How code2pdf Uses These Fonts
-
-The Python script `scripts/code_to_pdf.py` specifies font families in this order:
-
-1. **For code blocks** (monospace):
-   ```css
-   font-family: "Noto Sans Mono CJK SC", "Noto Sans Mono",
-                "DejaVu Sans Mono", "Courier New", monospace;
-   ```
-
-2. **For headers/footers** (sans-serif):
-   ```css
-   font-family: "Noto Sans SC", "DejaVu Sans", sans-serif;
-   ```
-
-**Fallback behavior**: If CJK fonts are not installed, WeasyPrint will fall back to DejaVu Sans Mono, which **cannot** render CJK characters (will show boxes).
+To use another installed font (e.g. WenQuanYi Micro Hei), add its family name to
+`CJK_FALLBACK` in `scripts/theme.py`.
 
 ## Troubleshooting
 
-### Issue: Chinese characters appear as boxes (□□□)
+**Characters appear as boxes (□□□)**
 
-**Cause**: CJK fonts are not installed or not found by WeasyPrint.
-
-**Solution**:
 ```bash
-# 1. Verify fonts are installed
-ls ~/.local/share/fonts/noto-cjk/
-
-# 2. Rebuild font cache
-fc-cache -f ~/.local/share/fonts/
-
-# 3. Test font detection
-fc-list | grep -i "noto.*cjk"
-
-# 4. If no output, reinstall fonts (see Quick Installation above)
+fc-list ":charset=4e2d" family           # empty means no font has the characters
+fc-cache -f ~/.local/share/fonts          # rebuild the cache after copying fonts by hand
+ls -l ~/.local/share/fonts/noto-cjk/      # .otf files must be readable
 ```
 
-### Issue: "Font not found" warnings from WeasyPrint
+Then convert again. If `fc-list` is missing, install fontconfig or check with `code2pdf --version`.
 
-**Cause**: Font cache is outdated or fonts are in wrong location.
+**Some characters render, others don't**: the installed font may not cover them (rare
+characters, emoji). Install `fonts-noto-cjk` (full coverage) or `fonts-noto-color-emoji`.
 
-**Solution**:
+## Uninstall
+
 ```bash
-# Update font cache with verbose output
-fc-cache -fv ~/.local/share/fonts/noto-cjk/
-
-# Verify font directory permissions
-ls -la ~/.local/share/fonts/noto-cjk/
-# All .otf files should be readable (r-- permissions)
+rm -rf ~/.local/share/fonts/noto-cjk && fc-cache -f
 ```
-
-### Issue: Some characters render, others don't
-
-**Cause**: Missing specific regional font variant.
-
-**Solution**: Install all CJK variants (see "Install All CJK Fonts" section above).
-
-### Issue: PDF generation is slow with CJK fonts
-
-**Expected behavior**: First PDF generation with CJK text may take 2-3 seconds as WeasyPrint loads fonts. Subsequent conversions are cached and faster.
-
-**Optimization**: This is normal. CJK fonts are large (~15 MB each) and take time to load.
-
-## Alternative Fonts (If Noto Fonts Don't Work)
-
-### WenQuanYi (文泉驿)
-
-Free Chinese fonts:
-```bash
-# Debian/Ubuntu systems (if you have sudo)
-sudo apt-get install fonts-wqy-microhei fonts-wqy-zenhei
-
-# Manual installation
-mkdir -p ~/.local/share/fonts/wqy
-cd ~/.local/share/fonts/wqy
-wget https://downloads.sourceforge.net/wqy/wqy-microhei-0.2.0-beta.tar.gz
-tar -xzf wqy-microhei-0.2.0-beta.tar.gz
-cp wqy-microhei/*.ttc .
-fc-cache -f ~/.local/share/fonts/wqy/
-```
-
-Then update `scripts/code_to_pdf.py` to use "WenQuanYi Micro Hei" instead of "Noto Sans CJK SC".
-
-### Source Han Sans (思源黑体)
-
-Adobe's open-source CJK font (same as Noto CJK, different name):
-```bash
-# Download from Adobe
-wget https://github.com/adobe-fonts/source-han-sans/releases/download/2.004R/SourceHanSansSC.zip
-```
-
-## Uninstallation
-
-To remove CJK fonts:
-```bash
-rm -rf ~/.local/share/fonts/noto-cjk/
-fc-cache -f
-```
-
-**Note**: code2pdf will still work for non-CJK text after removing fonts.
-
-## Additional Resources
-
-- [Noto CJK GitHub Repository](https://github.com/googlefonts/noto-cjk)
-- [Google Fonts: Noto Sans](https://fonts.google.com/noto)
-- [WeasyPrint Font Documentation](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#fonts)
-- [Fontconfig User Guide](https://www.freedesktop.org/software/fontconfig/fontconfig-user.html)
 
 ## License
 
-Noto Sans CJK fonts are licensed under the **SIL Open Font License 1.1**:
-- ✅ Free for personal and commercial use
-- ✅ Can be bundled with software
-- ✅ Can be modified
-- ❌ Cannot be sold by itself
-
-Full license: https://scripts.sil.org/OFL
-
----
-
-**Last Updated**: October 23, 2025
-**Font Version**: Noto Sans CJK 2.004
-**Tested With**: code2pdf (Python/WeasyPrint implementation)
+Noto Sans CJK is licensed under the SIL Open Font License 1.1
+(<https://github.com/notofonts/noto-cjk>); `setup_cjk_fonts.sh` copies its LICENSE next to the fonts.

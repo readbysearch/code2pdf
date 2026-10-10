@@ -1,7 +1,6 @@
 """Launchers must find their scripts relative to themselves, not via Homebrew."""
 
 import os
-import shutil
 import subprocess
 from pathlib import Path
 import pytest
@@ -21,14 +20,8 @@ def repo_venv_has_deps() -> bool:
 
 
 def isolated_path(tmp: Path) -> str:
-    """A PATH with gs and jq but no brew and no python carrying pygments/weasyprint."""
-    tools = tmp / "tools"
-    tools.mkdir(exist_ok=True)
-    for tool in ("gs", "jq"):
-        found = shutil.which(tool)
-        if found and not (tools / tool).exists():
-            (tools / tool).symlink_to(found)
-    return f"{tools}:/usr/bin:/bin"
+    """A PATH with no brew and no python carrying pygments/weasyprint (code2pdf needs neither gs nor jq)."""
+    return "/usr/bin:/bin"
 
 
 def run(cmd, cwd, env_extra=None):
@@ -74,7 +67,6 @@ def test_code2pdf_home_override(temp_dir):
     """CODE2PDF_HOME points the launcher at another install (used by the Homebrew formula)."""
     home = temp_dir / "fakehome"
     (home / "scripts").mkdir(parents=True)
-    (home / "config").mkdir()
     marker = home / "scripts" / "print_single_file_to_pdf.sh"
     marker.write_text('#!/bin/bash\necho "FAKE HOME USED for $1"\n')
     marker.chmod(0o755)

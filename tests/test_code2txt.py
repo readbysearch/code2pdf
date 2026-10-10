@@ -170,8 +170,9 @@ class TestCode2txt:
              str(empty_dir)]
         )
         
-        # Should handle empty directory gracefully
-        assert returncode == 1 or "No files were processed" in stderr
+        # Fails clearly rather than writing an empty file
+        assert returncode == 1
+        assert "No files were processed" in stderr
     
     def test_invalid_directory(self, code2txt_path, temp_dir):
         """Test behavior with invalid directory."""

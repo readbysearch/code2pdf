@@ -1,6 +1,5 @@
 """Pytest configuration and shared fixtures for testing code2pdf and code2txt."""
 
-import os
 import shutil
 import subprocess
 import tempfile
@@ -38,9 +37,11 @@ def edge_cases_dir(project_root) -> Path:
 
 
 @pytest.fixture
-def empty_dir(project_root) -> Path:
-    """Get the empty directory."""
-    return project_root / "tests" / "fixtures" / "empty_dir"
+def empty_dir(temp_dir) -> Path:
+    """A real, empty directory."""
+    path = temp_dir / "empty"
+    path.mkdir()
+    return path
 
 
 @pytest.fixture
@@ -103,16 +104,6 @@ def read_output_file(file_path: Path) -> str:
     return file_path.read_text()
 
 
-def count_files_in_output(output_content: str) -> int:
-    """Count the number of files in the output based on ## headers."""
-    return output_content.count("\n## ")
-
-
-def has_table_of_contents(output_content: str) -> bool:
-    """Check if the output has a table of contents."""
-    return "# Table of Contents" in output_content
-
-
 def get_language_from_output(output_content: str, filename: str) -> str:
     """Extract the language identifier used for a file in the output."""
     file_section = f"## {filename}"
@@ -147,45 +138,13 @@ def create_large_file(temp_dir) -> Path:
     return large_file
 
 
-@pytest.fixture
-def create_symlink(temp_dir) -> Tuple[Path, Path]:
-    """Create a symbolic link for testing."""
-    target = temp_dir / "target.txt"
-    target.write_text("This is the target file")
-    
-    link = temp_dir / "link.txt"
-    link.symlink_to(target)
-    
-    return target, link
-
-
 # Helper class for assertions
 class OutputAssertions:
     """Helper class for common output assertions."""
     
-    @staticmethod
-    def assert_file_included(output: str, filename: str):
-        """Assert that a file is included in the output."""
-        assert f"## {filename}" in output or f"- {filename}" in output, \
-            f"File {filename} not found in output"
     
-    @staticmethod
-    def assert_file_not_included(output: str, filename: str):
-        """Assert that a file is not included in the output."""
-        assert f"## {filename}" not in output, \
-            f"File {filename} should not be in output"
     
-    @staticmethod
-    def assert_has_toc(output: str):
-        """Assert that the output has a table of contents."""
-        assert "# Table of Contents" in output, \
-            "Table of contents not found in output"
     
-    @staticmethod
-    def assert_no_toc(output: str):
-        """Assert that the output has no table of contents."""
-        assert "# Table of Contents" not in output, \
-            "Table of contents should not be in output"
     
     @staticmethod
     def assert_language(output: str, filename: str, expected_language: str):

@@ -29,7 +29,6 @@ import subprocess
 import sys
 import tempfile
 from collections import OrderedDict
-from pathlib import Path
 
 
 def split_list(value):
