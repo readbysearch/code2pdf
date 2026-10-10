@@ -14,15 +14,28 @@ from weasyprint import HTML, CSS
 from weasyprint.text.fonts import FontConfiguration
 
 
+def lexer_for(file_path):
+    """Pygments lexer for a file name, falling back to plain text."""
+    try:
+        return get_lexer_for_filename(file_path)
+    except Exception:
+        return TextLexer()
+
+
+def read_source(file_path):
+    """Read a source file as UTF-8, falling back to latin-1."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except UnicodeDecodeError:
+        with open(file_path, 'r', encoding='latin-1') as f:
+            return f.read()
+
+
 def generate_html(file_path, file_content, relative_path=None):
     """Generate HTML with syntax highlighting for the given file."""
 
-    # Try to get appropriate lexer based on filename
-    try:
-        lexer = get_lexer_for_filename(file_path)
-    except:
-        # Fallback to plain text if language can't be detected
-        lexer = TextLexer()
+    lexer = lexer_for(file_path)
 
     # Generate syntax-highlighted HTML
     formatter = HtmlFormatter(
@@ -113,14 +126,7 @@ def generate_html(file_path, file_content, relative_path=None):
 def convert_to_pdf(file_path, output_pdf, relative_path=None):
     """Convert a source code file to PDF with syntax highlighting."""
 
-    # Read the file with UTF-8 encoding
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-    except UnicodeDecodeError:
-        # Fallback to latin-1 if UTF-8 fails
-        with open(file_path, 'r', encoding='latin-1') as f:
-            content = f.read()
+    content = read_source(file_path)
 
     # Generate HTML
     html_content = generate_html(file_path, content, relative_path)

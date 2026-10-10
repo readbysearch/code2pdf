@@ -136,18 +136,12 @@ check_dependencies() {
     if ! command_exists "python3" || ! python3 -m venv --help >/dev/null 2>&1; then
         missing+=("python3 (with venv)")
     fi
-    if ! command_exists "gs"; then
-        missing+=("ghostscript")
-    fi
-    if ! command_exists "jq"; then
-        missing+=("jq")
-    fi
 
     if [[ ${#missing[@]} -ne 0 ]]; then
         print_error "Missing required dependencies: ${missing[*]}"
         echo "Install them first:"
-        echo "  Ubuntu/Debian: sudo apt install curl python3-venv ghostscript jq libpango-1.0-0 libpangoft2-1.0-0"
-        echo "  Fedora/RHEL:   sudo dnf install curl python3 ghostscript jq pango"
+        echo "  Ubuntu/Debian: sudo apt install curl python3-venv libpango-1.0-0 libpangoft2-1.0-0"
+        echo "  Fedora/RHEL:   sudo dnf install curl python3 pango"
         echo "  macOS:         brew install readbysearch/tap/code2pdf  (installs everything)"
         exit 1
     fi
