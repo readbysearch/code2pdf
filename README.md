@@ -139,9 +139,11 @@ status updates in place; in logs or pipes a line is printed every 10%.
 
 **Big directories** (more than ~200 pages) are rendered in parts of ~100 pages, each in its own
 process, then joined, so memory stays bounded (about 1.3 GB per part) and several CPU cores are
-used. `-j N` / `--jobs N` sets how many parts render at once (default 2; 1 on machines with
-less than 8 GB). A 563-page project takes ~30 s with 2 parts at a time (3.1 GB peak), ~23 s
-with 3 (3.7 GB), and ~52 s with 1 (1.9 GB); without parts it took 54 s and 4.2 GB.
+used. `-j N` / `--jobs N` sets how many parts render at once (default 3 with 16 GB of RAM or
+more, 2 with 8 GB, else 1). A 563-page project takes ~23 s with 3 parts at a time (3.7 GB peak), ~30 s
+with 2 (3.1 GB), and ~52 s with 1 (1.9 GB); without parts it took 54 s and 4.2 GB.
+The joined PDF looks the same as a single-pass one (same text, pixels, contents links
+and bookmarks); it is ~25% bigger because each part embeds its own font subset.
 
 ## Fonts
 
