@@ -11,6 +11,7 @@ Usage (positional arguments match print_all.sh):
 
   --list-files   Print the selected files (relative to ROOT) instead of rendering.
   --theme NAME   paper (default), mono, or any Pygments style; default from $CODE2PDF_THEME.
+  --quiet        No progress output (also $CODE2PDF_QUIET).
   --list-themes  Print every theme name.
 
 Dates: the contents page says when the PDF was printed ($SOURCE_DATE_EPOCH overrides "now")
@@ -193,8 +194,9 @@ def count_lines(source):
     return source.count("\n") + (1 if source and not source.endswith("\n") else 0)
 
 
-def build_html(entries, theme, project, printed_moment, info, contents=True):
-    """entries: [(display path, absolute path)]; info: SourceInfo keyed by display path."""
+def build_html(entries, theme, project, printed_moment, info, contents=True, sources=None):
+    """entries: [(display path, absolute path)]; info: SourceInfo keyed by display path;
+    sources: optional {absolute path: text} already read by the caller."""
     printed = printed_moment.date().isoformat()
     from pygments import highlight
     from pygments.formatters import HtmlFormatter
@@ -206,7 +208,7 @@ def build_html(entries, theme, project, printed_moment, info, contents=True):
     sections = []
     total_lines = 0
     for i, (rel, path) in enumerate(entries):
-        source = read_source(path)
+        source = sources[path] if sources and path in sources else read_source(path)
         lexer = lexer_for(rel, source)
         lines = count_lines(source)
         total_lines += lines
@@ -253,13 +255,54 @@ def build_html(entries, theme, project, printed_moment, info, contents=True):
 """
 
 
-def render_document(entries, output, theme_name="paper", project=None, contents=True, root=None):
-    """Render [(display path, absolute path)] into OUTPUT. Raises ValueError for an unknown theme."""
+class _WeasyPrintProgress:
+    """Forward WeasyPrint's progress log (stages, and one message per laid-out page) to Progress."""
+
+    def __init__(self, progress):
+        import logging
+        self.progress = progress
+        self.logger = logging.getLogger("weasyprint.progress")
+        self.handler = logging.Handler()
+        self.handler.emit = self.emit
+        self.saved = (self.logger.level, self.logger.propagate)
+
+    def emit(self, record):
+        message = record.getMessage()
+        if message.startswith("Step 1 "):
+            self.progress.preparing()
+        elif message.startswith("Step 5 - Creating layout - Page "):
+            self.progress.page(int(message.split("Page ")[1].split()[0]))
+        elif message.startswith("Step 6 "):
+            self.progress.writing()
+
+    def __enter__(self):
+        import logging
+        self.logger.addHandler(self.handler)
+        self.logger.setLevel(logging.INFO)
+        self.logger.propagate = False
+        return self
+
+    def __exit__(self, *exc):
+        self.logger.removeHandler(self.handler)
+        self.logger.setLevel(self.saved[0])
+        self.logger.propagate = self.saved[1]
+
+
+def render_document(entries, output, theme_name="paper", project=None, contents=True, root=None,
+                    quiet=True):
+    """Render [(display path, absolute path)] into OUTPUT. Raises ValueError for an unknown theme.
+    Unless QUIET, reports progress on stderr."""
     from weasyprint import HTML
     from weasyprint.text.fonts import FontConfiguration
+    from code_to_pdf import read_source
+    import progress as progress_report
     import theme as themes
 
     theme = themes.resolve_theme(theme_name)
+    sources = {path: read_source(path) for _, path in entries}
+    progress = progress_report.Progress(
+        sys.stderr, files=len(entries), lines=sum(count_lines(text) for text in sources.values()),
+        estimated_pages=progress_report.estimate_pages(list(sources.values()), contents=contents), quiet=quiet)
     if root is None:  # single file: dates come from its own folder
         rel, path = entries[0]
         single = source_info(os.path.dirname(path), [os.path.basename(path)])
@@ -267,16 +310,22 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
     else:
         info = source_info(root, [rel for rel, _ in entries])
 
-    document = build_html(entries, theme, project, printed_at(), info, contents=contents)
+    document = build_html(entries, theme, project, printed_at(), info, contents=contents, sources=sources)
     out_dir = os.path.dirname(os.path.abspath(output))
     fd, tmp = tempfile.mkstemp(prefix=".code2pdf-", suffix=".pdf", dir=out_dir)
     os.close(fd)
     try:
-        HTML(string=document, base_url=root or out_dir).write_pdf(tmp, font_config=FontConfiguration())
+        with _WeasyPrintProgress(progress):
+            rendered = HTML(string=document, base_url=root or out_dir).render(font_config=FontConfiguration())
+            rendered.write_pdf(tmp)
         os.replace(tmp, output)
+    except BaseException:
+        progress.abort()
+        raise
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
+    progress.done(pages=len(rendered.pages), output=output)
 
 
 def parse_args(argv):
@@ -288,6 +337,7 @@ def parse_args(argv):
     parser.add_argument("--list-files", action="store_true")
     parser.add_argument("--list-themes", action="store_true")
     parser.add_argument("--theme", default=os.environ.get("CODE2PDF_THEME", "paper"))
+    parser.add_argument("--quiet", action="store_true", default=bool(os.environ.get("CODE2PDF_QUIET")))
     return parser.parse_args(argv)
 
 
@@ -312,15 +362,13 @@ def main(argv=None):
         print(f"Error: no matching files in {root}", file=sys.stderr)
         return 1
 
-    print(f"Rendering {len(files)} files from {root}", file=sys.stderr)
     entries = [(rel, os.path.join(root, rel)) for rel in files]
     try:
         render_document(entries, output, theme_name=args.theme, project=os.path.basename(root),
-                        contents=True, root=root)
+                        contents=True, root=root, quiet=args.quiet)
     except ValueError as e:
         print(f"Error: {e}; run `code2pdf --list-themes` to see the names", file=sys.stderr)
         return 1
-    print(f"Success: PDF created at {output}", file=sys.stderr)
     return 0
 
 

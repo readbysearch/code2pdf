@@ -49,6 +49,7 @@ show_help() {
    echo "  --include-types LIST      Only include these file types (overrides default whitelist)"
    echo "  --theme NAME              Colour theme: paper (default), mono (black & white), or any Pygments style"
    echo "  --list-themes             List all theme names"
+   echo "  -q, --quiet               No progress output"
    echo "  -h, --help                Show this help message"
    echo ""
    echo "Examples:"
@@ -109,6 +110,10 @@ main() {
                # Read by scripts/dir_to_pdf.py and scripts/code_to_pdf.py
                export CODE2PDF_THEME="$2"
                shift 2
+               ;;
+           -q|--quiet)
+               export CODE2PDF_QUIET=1
+               shift
                ;;
            --ignore-types)
                IGNORE_TYPES="$2"
