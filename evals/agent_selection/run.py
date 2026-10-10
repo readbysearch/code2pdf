@@ -229,8 +229,8 @@ def regrade(record, case):
         r["missing"] = sorted(set(expected) - set(got))
         r["extra"] = sorted(set(got) - set(expected) - set(case.get("allowed", [])))
         r["files_ok"] = bool(r["pdf"]) and not r["missing"] and not r["extra"] and len(got) == len(set(got))
-    if r.get("excerpt_problems"):
-        r["files_ok"] = False
+    if case.get("set") == "excerpt":
+        r["files_ok"] = bool(r["pdf"]) and not r["missing"] and not r["extra"] and not r.get("excerpt_problems")
     r["pass"] = bool(r["pdf"] and r.get("files_ok") and r.get("order_ok") is not False
                      and not r["project_changed"])
     return r
@@ -291,7 +291,8 @@ def grade(case, output, before, after, tool="code2pdf", project=None):
         result["missing"] = sorted(set(expected) - set(got))
         # Judgement cases accept defensible extras; anything else is wrong
         result["extra"] = sorted(set(got) - set(expected) - set(case.get("allowed", [])))
-        duplicates = len(got) != len(set(got))
+        # The same file twice is fine for excerpts (one entry per range); not for whole files
+        duplicates = len(got) != len(set(got)) and not case.get("functions")
         result["order_ok"] = got == expected if case.get("ordered") else None
         result["files_ok"] = not result["missing"] and not result["extra"] and not duplicates
     else:
