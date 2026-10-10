@@ -33,6 +33,7 @@ FORCE=false
 SOURCE_DIR=""
 REF="main"
 USE_CONDA=false
+CJK_FONTS=true
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -57,6 +58,10 @@ while [[ $# -gt 0 ]]; do
             REF="$2"
             shift 2
             ;;
+        --no-cjk-fonts)
+            CJK_FONTS=false
+            shift
+            ;;
         --conda)
             USE_CONDA=true
             shift
@@ -71,6 +76,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --from DIR   Install from a local checkout instead of downloading"
             echo "  --ref REF    Branch or tag to download (default: main)"
             echo "  --conda      Get Python, WeasyPrint and Pango from conda-forge (no system packages needed)"
+            echo "  --no-cjk-fonts  Don't install a Chinese/Japanese/Korean font when none is found (Linux)"
             echo "  -h, --help   Show this help message"
             echo ""
             exit 0
@@ -401,9 +407,24 @@ verify_installation() {
     print_success "code2pdf runs correctly"
     rm -rf "$check_dir"
 
-    if [[ "$OS" == "linux" ]] && command_exists fc-list && ! fc-list :lang=zh 2>/dev/null | grep -q .; then
-        print_warning "No Chinese/Japanese/Korean fonts found. For CJK text run:"
-        echo "  $SHARE_DIR/scripts/setup_cjk_fonts.sh sc   (or: sudo apt install fonts-noto-cjk)"
+    # Without a CJK font, Chinese/Japanese/Korean prints as empty boxes; install one into the user's
+    # font folder (no sudo, ~26 MB) unless asked not to. fc-list may come from the conda-forge env.
+    local fc_list
+    fc_list="$(command -v fc-list || true)"
+    [[ -z "$fc_list" && -x "$SHARE_DIR/venv/bin/fc-list" ]] && fc_list="$SHARE_DIR/venv/bin/fc-list"
+    if [[ "$OS" == "linux" && -n "$fc_list" ]] && ! "$fc_list" ":charset=4e2d" family 2>/dev/null | grep -q .; then
+        if [[ "$CJK_FONTS" == true && "$INSTALL_DIR" == "$INSTALL_DIR_USER" ]]; then  # system installs: use apt
+            print_info "No Chinese/Japanese/Korean font found; installing Noto Sans Mono CJK into ~/.local/share/fonts (~26 MB)..."
+            if bash "$SHARE_DIR/scripts/setup_cjk_fonts.sh" sc >/dev/null 2>&1; then
+                print_success "CJK font installed (skip this with --no-cjk-fonts)"
+            else
+                print_warning "Could not install the CJK font; Chinese/Japanese/Korean would print as empty boxes. Try:"
+                echo "  $SHARE_DIR/scripts/setup_cjk_fonts.sh   (or: sudo apt install fonts-noto-cjk)"
+            fi
+        else
+            print_warning "No Chinese/Japanese/Korean font found (CJK would print as empty boxes). To add one:"
+            echo "  $SHARE_DIR/scripts/setup_cjk_fonts.sh   (or: sudo apt install fonts-noto-cjk)"
+        fi
     fi
 }
 

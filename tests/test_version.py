@@ -41,6 +41,12 @@ def test_unexpanded_placeholder_falls_back_to_git(version, temp_dir):
     assert version.read_version(str(temp_dir)) == ("unknown", "", "")
 
 
+def source_has_version_info():
+    """A git checkout, or a GitHub tarball whose VERSION git filled in; not a plain file copy."""
+    return (PROJECT_ROOT / ".git").is_dir() or "$Format" not in (PROJECT_ROOT / "VERSION").read_text()
+
+
+@pytest.mark.skipif(not source_has_version_info(), reason="plain copy: neither .git nor a filled-in VERSION")
 def test_checkout_uses_git(version):
     v, commit, date = version.read_version(str(PROJECT_ROOT))
     assert v != "unknown" and re.fullmatch(r"[0-9a-f]{7,}", commit) and re.fullmatch(r"\d{4}-\d\d-\d\d", date)
@@ -74,7 +80,10 @@ def test_launchers_print_version(temp_dir):
                                 timeout=60, cwd=temp_dir)
         assert result.returncode == 0, result.stderr
         first = result.stdout.splitlines()[0]
-        assert re.match(rf"{cmd} \S+.* \(commit [0-9a-f]{{7,}}, \d{{4}}-\d\d-\d\d\)$", first), first
+        if source_has_version_info():
+            assert re.match(rf"{cmd} \S+.* \(commit [0-9a-f]{{7,}}, \d{{4}}-\d\d-\d\d\)$", first), first
+        else:
+            assert first == f"{cmd} unknown", first
         kind = "git checkout" if (PROJECT_ROOT / ".git").is_dir() else "source tree"  # CI may check out a tarball
         assert f"installed: {kind}" in result.stdout
     pdf = subprocess.run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-V"], capture_output=True, text=True, timeout=60).stdout

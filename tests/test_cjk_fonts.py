@@ -75,3 +75,6 @@ def test_conversion_warns_with_a_fix(temp_dir):
     assert "Chinese" in result.stderr and "empty boxes" in result.stderr
     assert "setup_cjk_fonts.sh" in result.stderr
     assert (project / "merged.pdf").exists()
+    # repeated after "Done:", where it can't scroll away behind the progress lines
+    after_done = result.stderr.split("Done:", 1)[1]
+    assert "empty boxes" in after_done and "setup_cjk_fonts.sh" in after_done

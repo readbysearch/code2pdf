@@ -69,7 +69,10 @@ test file. Re-run it to upgrade; `--ref v3.6` installs a specific release.
 **No sudo?** `--user` needs no root at all. If `python3-venv` is missing it bootstraps pip
 itself (~100 MB). If the Pango library or Python is missing, it downloads
 [micromamba](https://mamba.readthedocs.io/) and builds the environment from conda-forge, which
-brings its own Python, WeasyPrint and Pango (~400 MB); `--conda` forces this.
+brings its own Python, WeasyPrint and Pango (~400 MB); `--conda` forces this. If no
+Chinese/Japanese/Korean font is installed, `--user` also installs Noto Sans Mono CJK into
+`~/.local/share/fonts` (~26 MB) so CJK text doesn't print as empty boxes; `--no-cjk-fonts`
+skips that.
 
 ### From a checkout (development)
 
@@ -184,7 +187,8 @@ Chinese, Japanese and Korean text works out of the box on **macOS** — the syst
 (PingFang, Hiragino, Apple SD Gothic/Nanum) are used automatically.
 
 On **Linux**, a CJK font must be installed, or those characters print as empty boxes.
-code2pdf checks this and warns before converting. With sudo: `sudo apt install fonts-noto-cjk`
+code2pdf checks this and warns before and after converting (`install.sh --user` installs a
+font automatically when none is found). With sudo: `sudo apt install fonts-noto-cjk`
 (the `.deb` recommends it). **Without sudo**, the bundled script downloads Noto Sans Mono CJK
 (~26 MB; it covers Chinese, Japanese and Korean, in a monospace design that keeps code columns
 aligned) into `~/.local/share/fonts`:
