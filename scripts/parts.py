@@ -87,8 +87,11 @@ def _stop_workers(pool):
     if hasattr(pool, "terminate_workers"):  # Python 3.14+
         pool.terminate_workers()
         return
-    for process in list((getattr(pool, "_processes", None) or {}).values()):
+    processes = list((getattr(pool, "_processes", None) or {}).values())
+    for process in processes:
         process.terminate()
+    for process in processes:  # wait, or they outlive us as orphans (zombies under a non-reaping init)
+        process.join(timeout=5)
     pool.shutdown(wait=False, cancel_futures=True)
 
 
