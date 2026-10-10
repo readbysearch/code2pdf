@@ -31,6 +31,13 @@ Skip these file names.
 .BI \-\-max\-file\-size " SIZE"
 Skip larger files, e.g. 500K or 1M (default 500K).
 .TP
+.BI \-\-files\-from " FILE"
+Use exactly the files listed in
+.I FILE
+(\- for standard input), one per line, in that order; relative to
+.I DIRECTORY
+or absolute. The filters don't apply; binary files are skipped.
+.TP
 .B \-\-no\-toc
 No table of contents.
 .TP
