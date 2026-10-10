@@ -104,6 +104,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requiremen
   python3-pypdf fonts-noto-cjk python3-pytest poppler-utils ghostscript git`. v3.7's release
   failed on assumptions that only hold on macOS or in a git checkout.
 - `packaging/deb/test-deb.sh DEB` installs, uses and removes the `.deb` in a fresh container.
+- **Agent eval** (`evals/agent_selection/`, see its README and RESULTS): headless agents turn
+  plain-language requests into PDFs; it needs the `claude` CLI and costs money, so it is not part
+  of pytest. Before releasing a change to selection, help text or messages, run the Haiku pass
+  (~$0.30, ~15 min) and compare with RESULTS.md (99–100%):
+  `.venv/bin/python evals/agent_selection/run.py run --label pre-vX.Y --model haiku --repeats 1 --set fixtures`
+  (add `--set real` for the real repositories, `--tool code2txt` for code2txt).
 
 ## Releasing
 
