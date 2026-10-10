@@ -186,6 +186,10 @@ process_directory() {
         [ -e "$entry" ] || continue  # Skip if doesn't exist (empty directory)
         
         if [ -f "$entry" ]; then
+            # Never read our own output (it may live inside the target directory)
+            if [ "$(realpath "$entry")" = "$OUTPUT_REAL" ]; then
+                continue
+            fi
             if should_process_file "$entry"; then
                 # Make path relative to target directory for cleaner output
                 local relative_path="${entry#$TARGET_DIR/}"
@@ -219,6 +223,7 @@ write_file_content() {
 main() {
     # Clear or create output file
     > "$OUTPUT_FILE"
+    OUTPUT_REAL=$(realpath "$OUTPUT_FILE")
     
     [ "$VERBOSE" = true ] && echo "Starting to process directory: $TARGET_DIR" >&2
     
