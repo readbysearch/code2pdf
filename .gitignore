@@ -33,3 +33,6 @@ htmlcov/
 .tox/
 .hypothesis/
 merged.pdf
+
+# Eval results (transcripts, PDFs)
+evals/*/results/

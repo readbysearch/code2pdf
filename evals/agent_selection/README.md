@@ -1,0 +1,88 @@
+# Agent-selection eval
+
+Can a coding agent turn a plain-language request ("the backend without tests, but with the
+JSON config") into the right PDF with code2pdf? This eval measures that, and is used to
+improve the parts of code2pdf an agent learns from: `--help`, warnings and error messages.
+
+The design follows [Automating eval design and hillclimbing](https://claude.dev/blog/automating-eval-design-and-hillclimbing/).
+
+## Cases
+
+Two sets, 42 cases in all:
+
+- **fixtures** (`cases.py`, `projects.py`): 27 requests over four small projects built fresh
+  for every run: a Flask + React monorepo (`shop`), a SwiftUI app (`orbit`), a Python research
+  repository (`ridge`) and a Go service (`relay`). Each is a git repository with one commit;
+  some cases add a commit or uncommitted edits. This set **saturated**: Haiku, Sonnet and Opus
+  all scored 99–100%, so it is a regression check, not something to climb.
+- **real** (`real_cases.py`): 15 requests over real repositories at pinned tags: Gymnasium
+  v1.0.0, Alamofire 5.9.1, gin v1.10.0, Express 4.21.0, Flask 3.0.3 (one case commits 3.0.2
+  first and asks for the release diff). Tarballs are cached in `~/.cache/code2pdf-evals` and
+  never executed. Expected files are computed from the tree by the rule the request states.
+
+- **Tasks mirror use.** They are the kinds of selection people ask for: one part of a
+  project, no tests or generated code, extra config files, files changed in the last
+  commit, files in a given order, or files that mention a name.
+- **Every case says why it is hard** (`why_hard`) and where it comes from (`source`). The hard
+  parts come from real failures, not from whatever today's model gets wrong:
+  - JSON, plist, `.tf`, `go.mod` and notebooks are not default types;
+  - hidden folders are skipped;
+  - the default `build` and `env*` folder rules drop real source (`Scripts/build`, `src/ridge/envs`);
+  - two folders share a name (`internal/legacy`, `lib/legacy`);
+  - a vendored fork lives in a skipped folder;
+  - the order isn't alphabetical;
+  - the selection needs git.
+- **Everything the grader checks is stated in the request**: which files, the order when one
+  is asked for, where the PDF goes, and that the project must not change.
+
+`run.py check` proves each case is sound:
+- every expected file exists and is text;
+- the case's reference solution passes;
+- the grader gives the same verdict twice;
+- the naive `code2pdf -a .` fails.
+
+## Grader
+
+Programmatic, no LLM judge. The PDF's bookmarks (one per file, labelled with its path) must
+equal the expected files. The order counts when the request gives one, and a `-a backend`
+style folder prefix is allowed. The PDF must be at the requested path, and the project
+must be unchanged byte for byte (`.git` aside).
+
+## Subjects
+
+Headless Claude Code (`claude -p`) with Bash/Read/Glob/Grep, `--setting-sources project`
+(no user plugins or hooks), run in the project folder. The prompt is the request, plus
+where to save the PDF and that nobody can answer questions. code2pdf is a fresh copy with
+no eval files and nothing pointing back to this repository, so the answers are out of
+reach. Runs with an API error or timeout are reported as infrastructure errors and kept
+out of the score.
+
+## Running
+
+```bash
+.venv/bin/python evals/agent_selection/run.py check
+.venv/bin/python evals/agent_selection/run.py run --label base-sonnet --model sonnet --repeats 3
+.venv/bin/python evals/agent_selection/run.py run --label opus --model opus --effort high --split test
+.venv/bin/python evals/agent_selection/run.py report base-sonnet opus
+```
+
+Scores come with 95% confidence intervals from a bootstrap over cases (the repeats of a case
+move together). `results/LABEL/` holds `runs.jsonl` (every command the agent ran, its
+answer, cost, verdict) and `report.html`; results are not committed.
+
+## Hillclimbing
+
+The surface is the text an agent reads: `--help`, warnings, errors. These are cheap to
+change and revert, and a change in score traces back to them. CLI behaviour changes are
+allowed when a failure shows a real gap, and they get unit tests like any other change.
+
+- The split is fixed (seed 2026, stratified by project): 26 train cases, 16 test cases.
+  Read train transcripts only.
+- Each round makes one change aimed at a root cause, then runs train and test with 3 repeats.
+  - Keep it if train goes up and test doesn't go down.
+  - Revert it if test goes down, or if train goes up while test stays flat on a change made
+    for a train case.
+- Never paste case wording or file names into code2pdf's text. Examples in `--help` must be
+  generic.
+- When two or three rounds stall, sort every remaining failure by cause (agent error, unclear
+  tool text, ambiguous case, grader bug) before changing anything.
