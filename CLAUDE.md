@@ -17,7 +17,9 @@ The project consists of:
 - **`bin/code2txt`** - Text combination tool with flexible filtering options
 
 ### Processing Scripts
-- **`scripts/code_to_pdf.py`** - Python script for converting source code to PDF with UTF-8/CJK support
+- **`scripts/code_to_pdf.py`** - Single-file mode (same design, no contents page) and shared helpers (`lexer_for`, `read_source`)
+- **`scripts/theme.py`** - Themes (paper, mono, any Pygments style), bundled font setup and page CSS
+- **`fonts/`** - Bundled IBM Plex Mono/Sans TTFs (OFL 1.1); found relative to `scripts/` in every install layout
 - **`scripts/print_single_file_to_pdf.sh`** - Converts individual files to PDF using Python script
 - **`scripts/print_all.sh`** - Thin wrapper: validates the directory and runs `dir_to_pdf.py`
 - **`scripts/dir_to_pdf.py`** - Selects files and renders the table of contents plus all files as one PDF
@@ -36,12 +38,14 @@ The project consists of:
 - Routes to appropriate processing script based on `-s` (single file) or `-a` (all files) options
 - Defines default filtering rules for directory processing
 
-### Python PDF Generator (`scripts/code_to_pdf.py`)
-- Converts source code → HTML (with Pygments) → PDF (with WeasyPrint)
-- Full UTF-8 and CJK character support
-- Syntax highlighting for 500+ languages
-- Configurable fonts with fallback support (Noto Sans CJK → DejaVu)
-- Generates headers with file paths and page numbers
+### Design (`scripts/theme.py`, `scripts/dir_to_pdf.py`)
+- Source code → HTML (Pygments) → PDF (WeasyPrint); both modes share `dir_to_pdf.render_document`
+- Themes: `paper` (default, print-designed colours that also differ in lightness/weight/slant), `mono` (black & white), or any Pygments style (code colours only; dark styles get a dark code block on the white page). Chosen with `--theme` or `$CODE2PDF_THEME`
+- Fonts: bundled IBM Plex Mono (code, true italics for comments) and Plex Sans (titles, contents, page headers) via `@font-face`; CJK falls back to PingFang/Hiragino/Noto CJK
+- Language: by file name, else by a `#!` line (`lexer_for(path, source)`), else plain text
+- Layout: line numbers in the left margin (`::before` counters on Pygments `linespans`), wrapped lines hang under the code; each file opens with folder, name and details; page header = path (left) and `project, date` (right)
+- Dates (`source_info`): contents page shows `Printed <date> from commit <hash> (<branch>)` (+ `with uncommitted changes`); each file shows `last changed <date>` (one streamed `git log --relative`), `uncommitted changes` (from `git status`), or `modified <date>` outside git. `$SOURCE_DATE_EPOCH` fixes the printing date; PDF metadata gets title and creation time
+- One block per code line costs ~60% more render time than the v3.3 markup (7.8 s vs 4.9 s for this repo); it is what makes wrapped lines hang cleanly
 
 ### code2txt (`bin/code2txt`)
 - Parses command-line arguments for flexible configuration
@@ -70,8 +74,7 @@ The project consists of:
 - Handles files without extensions (Dockerfile, Makefile, etc.)
 
 ### Single File PDF Processing (`scripts/print_single_file_to_pdf.sh`)
-- Converts individual files using Python script (`code_to_pdf.py`)
-- Full UTF-8 and CJK character support
+- Calls `code_to_pdf.py`, which renders the file with the same design (no contents page)
 - Output goes to current working directory
 
 ## Key Technical Details
@@ -80,11 +83,9 @@ The project consists of:
 - Python 3 with packages: pygments (syntax highlighting), weasyprint (HTML→PDF)
 
 **Font Support**:
-- Uses Noto Sans CJK fonts for Chinese/Japanese/Korean characters
+- Latin text uses the bundled IBM Plex fonts; Chinese/Japanese/Korean comes from system fonts
 - macOS: no setup needed; Pango falls back to system CJK fonts (PingFang, Hiragino, Apple SD Gothic/Nanum)
 - Linux: install `fonts-noto-cjk`, or run `setup_cjk_fonts.sh` (installs to `~/.local/share/fonts/noto-cjk/`)
-- Automatic fallback to DejaVu fonts for non-CJK text
-- Monospace fonts for code: Noto Sans Mono CJK SC
 - **Installation guide**: See `docs/font_installation_guide.md`
 - **Quick setup**: Run `./scripts/setup_cjk_fonts.sh [sc|tc|jp|kr|all]`
 
@@ -291,14 +292,15 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ## Testing
 
 ### Test Suite Overview
-- **56 automated tests** covering both tools
+- **76 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
   - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
   - code2pdf: 10 unit tests (`test_code2pdf.py`)
-  - Launchers: 5 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies
+  - Launchers: 8 tests (`test_launcher.py`): symlinks, `CODE2PDF_HOME`, help without dependencies, `--theme`, `--list-themes`
   - Directory conversion: 4 tests (`test_print_all_tmp.py`): `/tmp` isolation, missing directory
   - One-pass renderer: 12 tests (`test_dir_to_pdf.py`): filter parity with the old bash rules, table of contents first with correct page numbers, relative headers, no Ghostscript needed
+  - Design: 17 tests (`test_design.py`): themes, embedded Plex fonts, `#!` language detection, git/mtime dates, printing date, grouped contents page, single-file design
   - Integration: 8 tests (`test_integration.py`)
 - code2pdf tests need Pygments and WeasyPrint in `.venv/` (see Running Automated Tests); they skip or fail without them
 - **Test fixtures**: Sample projects and edge cases in `tests/fixtures/`
@@ -331,9 +333,11 @@ scripts/
   code_to_pdf.py                # Python script: source code → PDF (UTF-8 support)
   print_single_file_to_pdf.sh   # Bash wrapper for single file PDF
   print_all.sh                  # Directory conversion entry point (wraps dir_to_pdf.py)
+  theme.py                      # Themes, bundled fonts, page CSS
   dir_to_pdf.py                 # One-pass directory → PDF renderer with table of contents
   combine_to_txt.sh             # Text combination script
   setup_cjk_fonts.sh            # CJK font installation script
+fonts/                          # IBM Plex Mono/Sans TTFs + LICENSE-IBM-Plex.txt (OFL 1.1)
 config/
   vimrc                         # Legacy Vim config (no longer used)
   colors/
