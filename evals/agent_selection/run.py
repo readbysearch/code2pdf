@@ -47,7 +47,10 @@ for _case in real_cases.SCALE_CASES:
     _case["set"] = "scale"
 for _case in real_cases.JUDGEMENT_CASES:
     _case["set"] = "judgement"
-CASES = FIXTURE_CASES + real_cases.REAL_CASES + real_cases.SCALE_CASES + real_cases.JUDGEMENT_CASES
+for _case in real_cases.EXCERPT_CASES:
+    _case["set"] = "excerpt"
+CASES = (FIXTURE_CASES + real_cases.REAL_CASES + real_cases.SCALE_CASES + real_cases.JUDGEMENT_CASES
+         + real_cases.EXCERPT_CASES)
 BY_ID = {case["id"]: case for case in CASES}
 
 RESULTS = os.path.join(HERE, "results")
@@ -72,6 +75,8 @@ def applies(case, tool):
     (found in the first code2txt runs: every such run used code2txt's own defaults)."""
     if tool == "code2pdf":
         return True
+    if case.get("functions"):  # graded on printed line numbers, which code2txt doesn't print
+        return False
     return case.get("match") != "basename" and not case.get("scale") and "code2pdf" not in case["request"]
 
 
@@ -218,18 +223,56 @@ def regrade(record, case):
     """Apply the current grader to a stored run (its file list and project changes are saved)."""
     r = dict(record)
     r["project_changed"] = [p for p in r.get("project_changed", []) if not _ignorable(p)]
-    if "got" in r and not callable(case["expected"]) or case.get("set") == "judgement":
+    if case.get("set") == "judgement":
         expected = case["expected"](None) if callable(case["expected"]) else case["expected"]
         got = r.get("got", [])
         r["missing"] = sorted(set(expected) - set(got))
         r["extra"] = sorted(set(got) - set(expected) - set(case.get("allowed", [])))
         r["files_ok"] = bool(r["pdf"]) and not r["missing"] and not r["extra"] and len(got) == len(set(got))
+    if r.get("excerpt_problems"):
+        r["files_ok"] = False
     r["pass"] = bool(r["pdf"] and r.get("files_ok") and r.get("order_ok") is not False
                      and not r["project_changed"])
     return r
 
 
-def grade(case, output, before, after, tool="code2pdf"):
+def printed_lines(pdf):
+    """{(line number, text)} for code lines in the PDF, from pdftotext's layout."""
+    text = subprocess.run(["pdftotext", "-layout", pdf, "-"], capture_output=True, text=True).stdout
+    found = set()
+    for line in text.splitlines():
+        m = re.match(r"\s*(\d+)\s+(\S.*)$", line)
+        if m:
+            found.add((int(m.group(1)), m.group(2).strip()))
+    return found
+
+
+def excerpt_problems(case, pdf, project):
+    """For EXCERPT cases: each function's first and last line printed with its own number,
+    forbidden lines absent. (All files of a case share one printed-lines set; their line
+    numbers are checked against the text of the right file.)"""
+    printed = printed_lines(pdf)
+    numbers = {}
+    for n, text in printed:
+        numbers.setdefault(n, []).append(text)
+
+    def shown(rel, n):
+        want = open(os.path.join(project, rel), encoding="utf-8").read().split("\n")[n - 1].strip()
+        return any(t.startswith(want[:30]) or want.startswith(t[:30]) for t in numbers.get(n, []) if t)
+
+    problems = []
+    for rel, start, _ in case["functions"]:
+        end = real_cases.block_end(os.path.join(project, rel), start)
+        for n in (start, end):
+            if not shown(rel, n):
+                problems.append(f"{rel} line {n} not printed with its number")
+    for rel, n in case.get("forbidden", []):
+        if shown(rel, n):
+            problems.append(f"{rel} line {n} printed")
+    return problems
+
+
+def grade(case, output, before, after, tool="code2pdf", project=None):
     result = {"pdf": os.path.exists(output), "missing": [], "extra": [], "order_ok": None,
               "project_changed": sorted(p for p in set(before) ^ set(after)
                                         | {p for p in before if p in after and before[p] != after[p]}
@@ -253,6 +296,9 @@ def grade(case, output, before, after, tool="code2pdf"):
         result["files_ok"] = not result["missing"] and not result["extra"] and not duplicates
     else:
         result["files_ok"] = False
+    if case.get("functions") and result["pdf"] and project:
+        result["excerpt_problems"] = excerpt_problems(case, output, project)
+        result["files_ok"] = result["files_ok"] and not result["excerpt_problems"]
     result["pass"] = bool(result["pdf"] and result["files_ok"] and result["order_ok"] is not False
                           and not result["project_changed"])
     return result
@@ -309,7 +355,7 @@ def run_one(case, rep, args, bin_dir, transcripts):
         stats = transcript_stats(stream)
         if stats.get("api_error"):
             infra = infra or stats["api_error"]
-        result = grade(case, output, before, projects.snapshot(project), args.tool)
+        result = grade(case, output, before, projects.snapshot(project), args.tool, project)
         # Runs share the machine's /tmp: a fixed name like /tmp/files.txt can be overwritten
         # by a concurrent run, which is the eval's fault, not the agent's
         if not result["pass"] and not infra and args.jobs > 1 and any(re.search(r"(?<![\w.])/tmp/[\w.-]+", c)
@@ -421,6 +467,8 @@ def describe_failure(r):
         parts.append("extra " + ",".join(r["extra"][:4]) + ("…" if len(r["extra"]) > 4 else ""))
     if r["order_ok"] is False:
         parts.append("wrong order")
+    if r.get("excerpt_problems"):
+        parts.append("; ".join(r["excerpt_problems"][:3]))
     if r["project_changed"]:
         parts.append("changed project: " + ",".join(r["project_changed"][:3]))
     return "; ".join(parts)
@@ -458,8 +506,12 @@ def cmd_check(args):
             before = projects.snapshot(project)
             ref = case["reference"].replace("{out}", f"'{output_rel}'")
             proc = subprocess.run(["bash", "-c", ref], cwd=project, env=env, capture_output=True, text=True)
-            first = grade(case, output, before, projects.snapshot(project))
-            second = grade(case, output, before, projects.snapshot(project))
+            first = grade(case, output, before, projects.snapshot(project), project=project)
+            second = grade(case, output, before, projects.snapshot(project), project=project)
+            for rel, n, text in case.get("functions", []):
+                line = open(os.path.join(project, rel), encoding="utf-8").read().split("\n")[n - 1]
+                if not line.strip().startswith(text):
+                    problems.append(f"{rel}:{n} is not `{text}`: {line.strip()[:60]}")
             if first != second:
                 problems.append("grader verdict changed between two runs")
             if not first["pass"]:

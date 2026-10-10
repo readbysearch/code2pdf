@@ -204,6 +204,9 @@ section.file .meta {{ color: {p.graphite}; font-size: 8pt; }}
 .highlight pre > span[id]::before {{ content: counter(line); position: absolute; left: 0; width: 6mm; text-indent: 0;
     text-align: right; color: {theme.line_number_color}; font-size: 7pt; line-height: 1.75;
     font-style: normal; font-weight: 400; }}
+/* Part of a file: lines left out are marked; numbering restarts at each range (counter-reset inline) */
+.highlight pre > span.gap {{ display: block; padding-left: 9mm; margin: 1.2mm 0; color: {theme.line_number_color};
+                             font: italic 7.5pt "c2p Text", {CJK_FALLBACK}; }}
 {code_block}
 """
 

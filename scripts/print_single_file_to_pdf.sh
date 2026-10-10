@@ -12,8 +12,12 @@ if [ -z "$2" ]; then
   exit 1
 fi
 
-# Check if the file exists
-if [ ! -f "$1" ]; then
+# Check if the file exists (FILE:START-END prints part of it; code_to_pdf.py checks the range)
+file_path="$1"
+if [ ! -f "$file_path" ] && [[ "$file_path" =~ ^(.+):[0-9][0-9,-]*$ ]] && [ -f "${BASH_REMATCH[1]}" ]; then
+  file_path="${BASH_REMATCH[1]}"
+fi
+if [ ! -f "$file_path" ]; then
   echo "File not found." >&2
   exit 1
 fi
@@ -31,7 +35,7 @@ generate_pdf_file_name() {
 
 echo "Converting to a PDF file for $file_name"
 
-pdf_name=$(generate_pdf_file_name "$file_name")
+pdf_name=$(generate_pdf_file_name "$file_path")
 if [ -z "$output" ]; then
     output="$vs_project_folder_name/$pdf_name.pdf"
 elif [ -d "$output" ]; then

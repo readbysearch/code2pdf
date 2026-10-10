@@ -48,7 +48,9 @@ Options:
                          (default: 500K)
   --files-from FILE      Use exactly the files listed in FILE, one per line, in that order
                          (- reads stdin; paths relative to DIRECTORY or absolute; the
-                         filters above don't apply, binary files are skipped)
+                         filters above don't apply, binary files are skipped).
+                         path:START-END uses part of a file (also path:START-, path:LINE,
+                         path:10-40,90-120); its heading says which lines
   --no-toc               Skip table of contents generation
   --verbose              Show processing details
   -V, --version          Show the version and how it is installed

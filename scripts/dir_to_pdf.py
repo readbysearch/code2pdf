@@ -33,14 +33,104 @@ import fnmatch
 import html
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
 import tempfile
+from collections import namedtuple
 
 
 def split_list(value):
     return [item for item in value.split(",") if item] if value else []
+
+
+# One file to print: RANGES are ((start, end), ...) 1-based and inclusive, () for the whole file
+Entry = namedtuple("Entry", "rel path ranges", defaults=((),))
+
+_RANGES = re.compile(r":(\d+(?:-\d*)?(?:,\d+(?:-\d*)?)*)$")
+
+
+def split_ranges(name):
+    """'src/app.py:10-20,40-' -> ('src/app.py', ((10, 20), (40, None))); 'a.py:7' -> one line;
+    a name without a range suffix -> (name, ())."""
+    match = _RANGES.search(name)
+    if not match:
+        return name, ()
+    ranges = []
+    for part in match.group(1).split(","):
+        start, dash, end = part.partition("-")
+        ranges.append((int(start), int(end) if end else (None if dash else int(start))))
+    return name[:match.start()], tuple(ranges)
+
+
+def resolve_ranges(ranges, total):
+    """Sorted, merged ranges within a file of TOTAL lines, and a note if an end was cut to the
+    file's end. Raises ValueError for ranges that can't be printed."""
+    resolved, note = [], None
+    for start, end in ranges:
+        if start < 1:
+            raise ValueError("line numbers start at 1")
+        if end is not None and end < start:
+            raise ValueError(f"{start}-{end} ends before it starts")
+        if start > total:
+            raise ValueError(f"line {start} starts after the end (the file has {total:,} lines)")
+        if end is None or end > total:
+            if end is not None:
+                note = f"the file has {total:,} lines; printing up to line {total:,}"
+            end = total
+        resolved.append((start, end))
+    merged = []
+    for start, end in sorted(resolved):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    return tuple(merged), note
+
+
+def ranges_text(ranges, dash="–", sep=", "):
+    """((12, 14), (18, 18)) -> '12–14, 18'"""
+    return sep.join(f"{a}" if a == b else f"{a}{dash}{b}" for a, b in ranges)
+
+
+def lines_label(ranges):
+    one = len(ranges) == 1 and ranges[0][0] == ranges[0][1]
+    return ("line " if one else "lines ") + ranges_text(ranges)
+
+
+def range_spec(rel, ranges):
+    """The --files-from / --list-files form: 'a.py:12-14,18-18'."""
+    return rel + (":" + ",".join(f"{a}-{b}" for a, b in ranges) if ranges else "")
+
+
+def excerpt_source(source, ranges):
+    """Only the lines in RANGES (for counting and page estimates)."""
+    lines = source.splitlines(keepends=True)
+    return "".join("".join(lines[a - 1:b]) for a, b in ranges)
+
+
+def excerpt_html(code, index, ranges, total):
+    """Keep the line spans of RANGES from Pygments' linespans output (highlighting the whole file
+    keeps the lexer right inside multi-line strings and comments), mark what is left out, and
+    restart the line counter at each range so the numbers are the file's own."""
+    starts = [(m.start(), int(m.group(1))) for m in re.finditer(rf'<span id="f{index}-L-(\d+)">', code)]
+    end_pre = code.rindex("</pre>")
+    if not starts:
+        return code
+    lines = {n: code[pos:(starts[k + 1][0] if k + 1 < len(starts) else end_pre)]
+             for k, (pos, n) in enumerate(starts)}
+    out, shown = [code[:starts[0][0]]], 0
+    for start, end in ranges:
+        if start > shown + 1:
+            out.append(f'<span class="gap" style="counter-reset: line {start - 1}">'
+                       f'{html.escape(lines_label(((shown + 1, start - 1),)))} not shown</span>')
+        out.extend(lines[n] for n in range(start, end + 1) if n in lines)
+        shown = end
+    if shown < total:
+        out.append(f'<span class="gap">{html.escape(lines_label(((shown + 1, total),)))} not shown</span>')
+    out.append(code[end_pre:])
+    return "".join(out)
 
 
 def split_extension(name):
@@ -209,9 +299,24 @@ def report_binaries(binaries):
         print(f"Skipped {len(binaries)} binary {noun}: {shown}", file=sys.stderr)
 
 
+def _locate(name, root):
+    path = name if os.path.isabs(name) else os.path.join(root, name)
+    if not os.path.exists(path) and not os.path.isabs(name) and os.path.exists(name):
+        path = name  # relative to the current folder
+    return os.path.abspath(path)
+
+
+def file_lines(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    return data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
+
+
 def read_file_list(source, root, selector, exclude):
-    """Files named in SOURCE (- for stdin), one per line, relative to ROOT (or the current
-    folder) or absolute, kept in the given order. Only exclusions and binary checks apply."""
+    """Entries named in SOURCE (- for stdin), one per line, relative to ROOT (or the current
+    folder) or absolute, kept in the given order. `path:START-END[,START-END...]` prints part
+    of a file (a name that is itself an existing file is always taken whole). Only exclusions
+    and binary checks apply."""
     try:
         text = sys.stdin.read() if source == "-" else open(source, encoding="utf-8").read()
     except OSError as e:
@@ -221,21 +326,29 @@ def read_file_list(source, root, selector, exclude):
         name = line.strip()
         if not name:
             continue
-        path = name if os.path.isabs(name) else os.path.join(root, name)
-        if not os.path.exists(path) and not os.path.isabs(name) and os.path.exists(name):
-            path = name  # relative to the current folder
-        path = os.path.abspath(path)
+        path, ranges = _locate(name, root), ()
+        if not os.path.isfile(path):
+            base, wanted = split_ranges(name)
+            if wanted and os.path.isfile(_locate(base, root)):
+                path = _locate(base, root)
+                try:
+                    ranges, note = resolve_ranges(wanted, file_lines(path))
+                except ValueError as e:
+                    problems.append(f"{name}: {e}")
+                    continue
+                if note:
+                    print(f"Note: {name}: {note}", file=sys.stderr)
         rel = os.path.relpath(path, root)
         if not os.path.isfile(path):
             problems.append(f"not a file: {name}")
         elif rel == ".." or rel.startswith(".." + os.sep):
             problems.append(f"outside {root}: {name}")
-        elif rel not in seen:
-            seen.add(rel)
+        elif (rel, ranges) not in seen:
+            seen.add((rel, ranges))
             if (os.path.realpath(path) in exclude or selector.excluded(rel.split(os.sep))
                     or skip_binary(path, root, selector)):
                 continue
-            selected.append(rel)
+            selected.append((rel, ranges))
     if problems:
         raise ValueError("--files-from: " + "; ".join(problems))
     return selected
@@ -389,24 +502,42 @@ def build_sections(entries, theme, info, sources=None, first_index=0):
     formatter = HtmlFormatter(style=theme.style, linespans="L", cssclass="highlight")
     sections = []
     total_lines = 0
-    for i, (rel, path) in enumerate(entries, first_index):
+    entries = [Entry(*entry) for entry in entries]
+    for i, (rel, path, ranges) in enumerate(entries, first_index):
         source = sources[path] if sources and path in sources else read_source(path)
         lexer = lexer_for(rel, source)
         lines = count_lines(source)
-        total_lines += lines
         folder, name = os.path.split(rel)
         code = highlight(source, lexer, formatter).replace('id="L-', f'id="f{i}-L-')
         folder_html = f'<div class="dir">{html.escape(folder)}/</div>' if folder else ""
         language = "Plain text" if lexer.name == "Text only" else lexer.name
-        details = f"{language}, {lines:,} line{'s' if lines != 1 else ''}"
+        if ranges:
+            code = excerpt_html(code, i, ranges, lines)
+            details = f"{language}, {lines_label(ranges)} of {lines:,}"
+            lines = sum(end - start + 1 for start, end in ranges)
+        else:
+            details = f"{language}, {lines:,} line{'s' if lines != 1 else ''}"
+        total_lines += lines
         if info.files.get(rel):
             details += f", {info.files[rel]}"
         sections.append(
             f'<section class="file"><header>{folder_html}'
             f'<h1 id="f{i}" data-path="{html.escape(rel)}">{html.escape(name)}</h1>'
             f'<div class="meta">{html.escape(details)}</div></header>{code}</section>')
-    groups = group_by_folder([rel for rel, _ in entries], first_index)
+    groups = group_by_folder(contents_labels(entries), first_index)
     return sections, groups, total_lines, formatter.get_style_defs(".highlight")
+
+
+def contents_labels(entries):
+    """Paths as the contents page lists them: 'sub/c.js (lines 2–3)' for part of a file."""
+    return [entry.rel + (f" ({lines_label(entry.ranges)})" if entry.ranges else "")
+            for entry in (Entry(*e) for e in entries)]
+
+
+def printed_sources(entries, sources):
+    """What each entry prints: the whole source, or only its line ranges."""
+    return [excerpt_source(sources[e.path], e.ranges) if e.ranges else sources[e.path]
+            for e in (Entry(*e) for e in entries)]
 
 
 def group_by_folder(rels, first_index=0):
@@ -471,7 +602,7 @@ def build_html(entries, theme, project, printed_moment, info, contents=True, sou
     printed = printed_moment.date().isoformat()
     sections, groups, total_lines, style_defs = build_sections(entries, theme, info, sources)
     nav = build_contents(project, len(entries), total_lines, printed, info, groups) if contents else ""
-    title = project or (entries[0][0] if entries else "code2pdf")
+    title = project or (Entry(*entries[0]).rel if entries else "code2pdf")
     css = themes.font_face_css() + style_defs + themes.page_css(theme, header_right(project, printed))
     return wrap_document(title, printed_moment, css, nav + "".join(sections))
 
@@ -520,21 +651,23 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
     import theme as themes
 
     theme = themes.resolve_theme(theme_name)
-    sources = {path: read_source(path) for _, path in entries}
-    cjk_reminder = warn_missing_cjk_fonts(list(sources.values()) + [rel for rel, _ in entries])
+    entries = [Entry(*entry) for entry in entries]
+    sources = {e.path: read_source(e.path) for e in entries}
+    printed = printed_sources(entries, sources)
+    cjk_reminder = warn_missing_cjk_fonts(printed + [e.rel for e in entries])
     progress = progress_report.Progress(
-        sys.stderr, files=len(entries), lines=sum(count_lines(text) for text in sources.values()),
-        estimated_pages=progress_report.estimate_pages(list(sources.values()), contents=contents), quiet=quiet)
+        sys.stderr, files=len(entries), lines=sum(count_lines(text) for text in printed),
+        estimated_pages=progress_report.estimate_pages(printed, contents=contents), quiet=quiet)
     if root is None:  # single file: dates come from its own folder
-        rel, path = entries[0]
+        rel, path = entries[0].rel, entries[0].path
         single = source_info(os.path.dirname(path), [os.path.basename(path)])
         info = SourceInfo(single.summary, {rel: single.files[os.path.basename(path)]})
     else:
-        info = source_info(root, [rel for rel, _ in entries])
+        info = source_info(root, list(dict.fromkeys(e.rel for e in entries)))
 
     moment = printed_at()
     out_dir = os.path.dirname(os.path.abspath(output))
-    estimates = [progress_report.estimate_pages([sources[path]]) for _, path in entries]
+    estimates = [progress_report.estimate_pages([text]) for text in printed]
     import parts as parts_mode
     big = contents and root is not None and sum(estimates) > 2 * parts_mode.part_pages()
     if big and not parts_mode.available():
@@ -642,7 +775,7 @@ def main(argv=None):
         if args.files_from:
             files = read_file_list(args.files_from, root, selector, exclude)
         else:
-            files = collect_files(root, selector, exclude)
+            files = [(rel, ()) for rel in collect_files(root, selector, exclude)]
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -650,19 +783,20 @@ def main(argv=None):
     for option, text in selector.unused_patterns():
         print(f"Warning: {option} {text!r} matched nothing", file=sys.stderr)
     if args.list_files:
-        print("\n".join(files))
+        print("\n".join(range_spec(rel, ranges) for rel, ranges in files))
         return 0
     if not files:
         print(f"Error: no matching files in {root}", file=sys.stderr)
         return 1
 
-    entries = [(rel, os.path.join(root, rel)) for rel in files]
+    entries = [Entry(rel, os.path.join(root, rel), ranges) for rel, ranges in files]
     os.makedirs(os.path.dirname(output), exist_ok=True)
     try:
         render_document(entries, output, theme_name=args.theme, project=os.path.basename(root),
                         contents=True, root=root, quiet=args.quiet, jobs=args.jobs)
     except ValueError as e:
-        print(f"Error: {e}; run `code2pdf --list-themes` to see the names", file=sys.stderr)
+        hint = "; run `code2pdf --list-themes` to see the names" if "theme" in str(e) else ""
+        print(f"Error: {e}{hint}", file=sys.stderr)
         return 1
     return 0
 
