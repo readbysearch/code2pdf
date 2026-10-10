@@ -88,6 +88,8 @@ pytest --timeout=30
   - Joined output has the same text on every page as a single pass
   - Contents links and bookmarks point at each file; headers/footers on every page; metadata
 
+- **test_install_sh.py**: install.sh PATH setup (leaves a stock Ubuntu `~/.profile` alone) and latest-release selection, by sourcing the script
+
 - **test_version.py**: `--version`: version from VERSION/git, install kind, library versions, works without WeasyPrint
 
 - **test_cjk_fonts.py**: Warning when no installed font covers Chinese/Japanese/Korean text (fake `fc-list`)

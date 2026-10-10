@@ -223,6 +223,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 - **Users**: `brew install readbysearch/tap/code2pdf` (formula in [readbysearch/homebrew-tap](https://github.com/readbysearch/homebrew-tap)), or `install.sh` on Linux without Homebrew.
 - **Canonical repository**: `readbysearch/code2pdf` (the old `waleking/code2pdf` fork is archived).
 - **Ubuntu/Debian**: `packaging/deb/build-deb.sh VERSION [DIR]` builds `code2pdf_VERSION_all.deb` (files in `/usr/share/code2pdf`, symlinks in `/usr/bin`, man pages from `packaging/deb/man/`); it depends on Ubuntu's `weasyprint (>= 61)`, `python3-pygments`, recommends `python3-pypdf`, `fonts-noto-cjk`. `packaging/deb/test-deb.sh DEB` installs/uses/removes it in a fresh container. `.github/workflows/release-deb.yml` runs on every `v*` tag: build + `lintian --fail-on warning`, unit tests and install test on Ubuntu 24.04 and 26.04 containers, then attaches `code2pdf_X_all.deb` and `code2pdf_all.deb` (stable `releases/latest/download/` name) to the GitHub release
+- **install.sh defaults**: installs the latest release (`latest_release_tag`: `releases/latest` redirect via `curl -I` or `wget --spider`, then the API; falls back to `main` with a warning); `--ref main` for unreleased code. PATH: if a shell file already mentions `.local/bin` (Ubuntu's stock `~/.profile`), nothing is appended. A non-interactive ssh install once appended PATH lines on node 31 because its own PATH lacked `~/.local/bin`. Tests source the script with `CODE2PDF_INSTALL_SOURCED=1` (`tests/test_install_sh.py`)
 - **No-sudo installs** (`install.sh --user`): system `python3 -m venv` if `ensurepip` exists, else `venv --without-pip` + `get-pip.py`; if WeasyPrint still can't load (no Pango) or there is no python3, download micromamba (`mamba-org/micromamba-releases`) and create `venv/` from conda-forge (`python pygments weasyprint pypdf`, ~400 MB); `--conda` forces it. The launcher just uses `venv/bin/python3`. Tested as a non-root user on Ubuntu 24.04 with: no python3-venv (~100 MB), no Pango (conda), no Python (conda), everything
 - **Version** (`--version`/`-V`, `scripts/version.py`, stdlib only so it works on broken installs): `VERSION` holds `$Format:%(describe:tags)|%h|%cs$` and is marked `export-subst` in `.gitattributes`, so GitHub tarballs (Homebrew, install.sh) contain e.g. `v3.6-1-g1e724f3|1e724f3|2026-10-10` (verified on GitHub). `build-deb.sh` writes `v<VERSION>|<commit>|<date>` itself (CI checkouts have no tags); install.sh copies VERSION or, from a checkout, asks git; a checkout reads git directly. `v3.6-3-g…` shows as `3.6+3`, `-dirty` as `, uncommitted changes`, a bare hash as `unreleased`. The report also gives install kind (Homebrew / Debian package / install.sh [conda-forge] / git checkout), python + weasyprint/pygments/pypdf versions, and the CJK font fontconfig would use
 - **Compatibility notes** (found on Ubuntu): WeasyPrint < 62 ignores `calc()` in the code-line indent (use plain lengths); minimal Ubuntu has no `rev` or `file`; pypdf is optional (22.04 has none: big documents fall back to one pass)
@@ -304,7 +305,7 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
 ## Testing
 
 ### Test Suite Overview
-- **123 automated tests** covering both tools
+- **133 automated tests** covering both tools
 - **Test framework**: pytest with subprocess-based testing
 - **Test coverage**:
   - code2txt: 16 unit tests (`test_code2txt.py`) + 1 output-file regression test (`test_code2txt_output.py`)
@@ -315,7 +316,8 @@ pytest tests/test_code2txt.py::TestCode2txt::test_help_option
   - One-pass renderer: 12 tests (`test_dir_to_pdf.py`): filter parity with the old bash rules, table of contents first with correct page numbers, relative headers, no Ghostscript needed
   - Design: 17 tests (`test_design.py`): themes, embedded Plex fonts, `#!` language detection, git/mtime dates, printing date, grouped contents page, single-file design
   - Progress: 8 tests (`test_progress.py`): page estimate, terminal vs log output, ticking silent stages, time left, quiet
-  - Version: 15 tests (`test_version.py`): describe parsing, VERSION file vs placeholder vs git, install kind, launcher output, works without WeasyPrint
+  - install.sh: 9 tests (`test_install_sh.py`): PATH detection (stock Ubuntu ~/.profile), latest-release selection and fallbacks
+  - Version: 17 tests (`test_version.py`): describe parsing, VERSION file vs placeholder vs git, install kind, launcher output, works without WeasyPrint
   - CJK fonts: 6 tests (`test_cjk_fonts.py`): missing-font detection per script with a fake `fc-list`, warning text
   - Integration: 8 tests (`test_integration.py`)
 - code2pdf tests need Pygments and WeasyPrint in `.venv/` (see Running Automated Tests); they skip or fail without them

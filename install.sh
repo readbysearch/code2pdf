@@ -31,7 +31,7 @@ USER_INSTALL=false
 SYSTEM_INSTALL=false
 FORCE=false
 SOURCE_DIR=""
-REF="main"
+REF=""   # empty: the latest release (see choose_ref)
 USE_CONDA=false
 CJK_FONTS=true
 
@@ -74,7 +74,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --system     Install system-wide (/usr/local/bin, requires sudo)"
             echo "  --force      Skip confirmations"
             echo "  --from DIR   Install from a local checkout instead of downloading"
-            echo "  --ref REF    Branch or tag to download (default: main)"
+            echo "  --ref REF    Tag or branch to install (default: the latest release; main = newest, unreleased code)"
             echo "  --conda      Get Python, WeasyPrint and Pango from conda-forge (no system packages needed)"
             echo "  --no-cjk-fonts  Don't install a Chinese/Japanese/Korean font when none is found (Linux)"
             echo "  -h, --help   Show this help message"
@@ -257,6 +257,47 @@ determine_install_dir() {
     print_info "Commands: $INSTALL_DIR   Files: $SHARE_DIR"
 }
 
+# Latest release tag: from the releases/latest redirect (no API rate limit), else the API
+latest_release_tag() {
+    local location="" tag json=""
+    if command_exists "curl"; then
+        location="$(curl -fsS -I "https://github.com/$GITHUB_REPO/releases/latest" 2>/dev/null | tr -d '\r' \
+            | awk 'tolower($1) == "location:" {print $2}' | tail -1)" || true
+    elif command_exists "wget"; then
+        location="$(wget -q -S --spider --max-redirect=0 "https://github.com/$GITHUB_REPO/releases/latest" 2>&1 \
+            | awk 'tolower($1) == "location:" {print $2}' | tail -1)" || true
+    fi
+    tag="${location##*/tag/}"
+    if [[ -n "$location" && -n "$tag" && "$tag" != "$location" ]]; then
+        echo "$tag"
+        return 0
+    fi
+    if command_exists "curl"; then
+        json="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases/latest" 2>/dev/null)" || true
+    elif command_exists "wget"; then
+        json="$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/releases/latest" 2>/dev/null)" || true
+    fi
+    tag="$(printf '%s' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+    if [[ -n "$tag" ]]; then
+        echo "$tag"
+        return 0
+    fi
+    return 1
+}
+
+# Pick what to install: --ref if given, else the latest release, else main
+choose_ref() {
+    [[ -n "$REF" ]] && return 0
+    local tag
+    if tag="$(latest_release_tag)"; then
+        REF="$tag"
+        print_info "Installing release $REF (use --ref main for the newest, unreleased code)"
+    else
+        REF="main"
+        print_warning "Could not look up the latest release; installing main (newest, unreleased code)"
+    fi
+}
+
 # Fetch the source tree into $SRC
 fetch_source() {
     if [[ -n "$SOURCE_DIR" ]]; then
@@ -265,6 +306,7 @@ fetch_source() {
         return
     fi
 
+    choose_ref
     TEMP_DIR=$(mktemp -d)
     trap 'rm -rf "$TEMP_DIR"' EXIT
     local url="https://github.com/$GITHUB_REPO/archive/$REF.tar.gz"
@@ -360,6 +402,16 @@ configure_path() {
         print_info "$INSTALL_DIR is already in PATH"
         return
     fi
+
+    # A shell file may already add it (Ubuntu's stock ~/.profile adds ~/.local/bin when it exists);
+    # a non-interactive install (ssh, CI) doesn't see that in its own PATH, so look before appending
+    local f
+    for f in "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.bashrc" "$HOME/.zprofile" "$HOME/.zshrc"; do
+        if [[ -f "$f" ]] && grep -q -e '\.local/bin' "$f"; then
+            print_info "$INSTALL_DIR is added to PATH by ${f/#$HOME/\~} (new shells will find code2pdf)"
+            return
+        fi
+    done
 
     # Add to shell configuration files
     local shell_configs=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile")
@@ -468,4 +520,5 @@ main() {
     fi
 }
 
-main "$@"
+# Tests source this file with CODE2PDF_INSTALL_SOURCED=1 to call single functions
+[[ -n "${CODE2PDF_INSTALL_SOURCED:-}" ]] || main "$@"
