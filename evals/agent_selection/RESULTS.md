@@ -58,8 +58,34 @@ None of the failures were the agents' fault:
 
 **Product finding:** people and agents want to print *part* of a file. With no way to do it,
 13 of the 40 first-wording runs made excerpt files, which loses the real path and the real
-line numbers. A `path:START-END` form for `--files-from` (printed with its real path and line
-numbers) would cover it. That is a design decision, so it's proposed, not built.
+line numbers. That led to `path:START-END` (below).
+
+## Printing part of a file (`path:START-END`)
+
+Five excerpt cases ask for specific functions "each whole, with the file's real line numbers"
+(gin's Context JSON methods, Flask's RequestContext.push and process_response, Express's
+handle and dispatch, Alamofire's retry decision, CartPole's step and reset). The grader
+requires the real paths as bookmarks, each function's first and last line printed with its
+own number (the last line is found from indentation and braces), and that neighbouring lines
+named as forbidden are absent. 3 repeats each.
+
+| | v3.10.1 (no ranges) | with `path:START-END` |
+|---|---|---|
+| Haiku | 13% [0–40] | **100%** |
+| Sonnet | 47% [20–67], $0.19/run, 42 s | **80%** [53–100], **$0.08/run, 14 s** |
+| held-out test (both models) | 0–50% | 100% |
+
+Without ranges, agents copied functions into new files (`src/context.go`,
+`/tmp/c2p-work/src/Session.swift`), so the PDF showed made-up paths and line numbers starting
+at 1. Sonnet's three remaining failures are its own: it estimated where a function ends and
+stopped a few lines short (`ctx.py:367-391` for a method ending at 394). The help text was
+not tuned for that: a hint written for these cases would be fitting the eval, and code2pdf
+can't know where a function ends.
+
+Eval fixes in this round:
+- The usage limit cut runs short ("You've hit your session limit"); they were re-run with
+  `rerun-infra`.
+- The grader rejected a file listed twice with two ranges, which is a valid way to do it.
 
 ## Hillclimbing code2txt
 
