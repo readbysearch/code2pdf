@@ -65,8 +65,12 @@ add anything inside the project."""
 
 
 def applies(case, tool):
-    """code2txt takes a directory, not a single file, and renders nothing slow."""
-    return tool == "code2pdf" or (case.get("match") != "basename" and not case.get("scale"))
+    """code2txt takes a directory, not a single file, and renders nothing slow; and a request
+    that says "code2pdf's normal selection" can't be answered by an agent that has only code2txt
+    (found in the first code2txt runs: every such run used code2txt's own defaults)."""
+    if tool == "code2pdf":
+        return True
+    return case.get("match") != "basename" and not case.get("scale") and "code2pdf" not in case["request"]
 
 
 # --- split -------------------------------------------------------------------------------
@@ -457,8 +461,15 @@ def cmd_check(args):
 # --- report ------------------------------------------------------------------------------
 
 def load(label):
+    """Runs of LABEL, without cases that don't apply to the tool it tested."""
+    tool = "code2pdf"
+    meta = os.path.join(RESULTS, label, "meta.json")
+    if os.path.exists(meta):
+        with open(meta) as f:
+            tool = json.load(f).get("tool") or "code2pdf"
     with open(os.path.join(RESULTS, label, "runs.jsonl")) as f:
-        return [json.loads(line) for line in f if line.strip()]
+        runs = [json.loads(line) for line in f if line.strip()]
+    return [r for r in runs if r["case"] not in BY_ID or applies(BY_ID[r["case"]], tool)]
 
 
 def bootstrap_ci(runs, n=4000, seed=1):
