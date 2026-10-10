@@ -116,6 +116,34 @@ def _gin_root(r):
     return [f for f in files(r) if "/" not in f and f.endswith(".go") and not f.endswith("_test.go")]
 
 
+def _default(r, *extra):
+    """code2pdf's own default selection (what `code2pdf -a .` lists), plus EXTRA folders."""
+    env = dict(os.environ, CODE2PDF_QUIET="1")
+    cmd = [os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                        "bin", "code2pdf"), "-a", r, "--list-files"]
+    for folder in extra:
+        cmd += ["--include", folder]
+    return subprocess.run(cmd, capture_output=True, text=True, env=env, check=True).stdout.split("\n")[:-1]
+
+
+# Scale: renders longer than an agent's default 2-minute command limit (Claude Code's Bash tool).
+# The agent has to notice and wait (a longer timeout, or running it in the background).
+SCALE_CASES = [
+    dict(id="scale-alamofire", project="alamofire", scale=True,
+         request="Print the whole Alamofire repository the way code2pdf normally selects files, "
+                 "generated docs included. Yes, it will be big.",
+         expected=lambda r: _default(r),
+         why_hard="~7,700 pages, ~6 minutes to render: three times the default command timeout.",
+         source="production: whole-repository prints (ClaudeTerminal took 54 s for 563 pages)",
+         reference="code2pdf -a . -o {out}"),
+    dict(id="scale-gymnasium", project="gymnasium", scale=True,
+         request="Print the whole Gymnasium repository the way code2pdf normally selects files, "
+                 "and make sure gymnasium/envs is in it too (all of its files).",
+         expected=lambda r: _default(r, "gymnasium/envs"),
+         why_hard="Over the default command timeout, and env* drops gymnasium/envs.",
+         source="production: whole-repository prints", reference="code2pdf -a . --include gymnasium/envs -o {out}"),
+]
+
 REAL_CASES = [
     dict(id="gym-package", project="gymnasium",
          request="Print the gymnasium package (the gymnasium/ folder): every Python file in it.",
