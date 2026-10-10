@@ -211,6 +211,53 @@ is_binary() {
     [ "$total" -ne "$kept" ]
 }
 
+# Resolve a range spec ("12-14,3,40-") for a file of TOTAL lines into sorted, merged
+# "start-end,start-end" in RESOLVED; prints the problem and returns 1 if it can't be printed.
+resolve_ranges() {
+    local spec="$1" total="$2" part start end pairs="" merged="" ms=0 me=0
+    local IFS=','
+    for part in $spec; do
+        start="${part%%-*}"
+        case "$part" in
+            *-) end="$total" ;;
+            *-*) end="${part#*-}" ;;
+            *) end="$start" ;;
+        esac
+        if [ "$start" -lt 1 ]; then echo "line numbers start at 1"; return 1; fi
+        if [ "$end" -lt "$start" ]; then echo "$start-$end ends before it starts"; return 1; fi
+        if [ "$start" -gt "$total" ]; then
+            echo "line $start starts after the end (the file has $total lines)"; return 1
+        fi
+        [ "$end" -gt "$total" ] && end="$total"
+        pairs="$pairs$start $end"$'\n'
+    done
+    unset IFS
+    while read -r start end; do
+        [ -z "$start" ] && continue
+        if [ "$me" -gt 0 ] && [ "$start" -le $((me + 1)) ]; then
+            [ "$end" -gt "$me" ] && me="$end"
+        else
+            [ "$me" -gt 0 ] && merged="$merged,$ms-$me"
+            ms="$start"; me="$end"
+        fi
+    done <<< "$(printf '%s' "$pairs" | sort -n -k1,1 -k2,2)"
+    merged="$merged,$ms-$me"
+    RESOLVED="${merged#,}"
+}
+
+# "12-13,19-19" -> "lines 12-13, 19" (or "line 7")
+ranges_label() {
+    local spec="$1" part out="" count=0 single=""
+    local IFS=','
+    for part in $spec; do
+        count=$((count + 1))
+        if [ "${part%-*}" = "${part#*-}" ]; then part="${part%-*}"; single="$part"; fi
+        out="$out, $part"
+    done
+    unset IFS
+    if [ "$count" -eq 1 ] && [ -n "$single" ]; then echo "line $single"; else echo "lines ${out#, }"; fi
+}
+
 # --files-from: exactly the listed files, in the listed order. Paths are relative to TARGET_DIR
 # (or to the current folder), or absolute; they must be inside TARGET_DIR. Binary files are
 # skipped; missing files are errors. Sets sorted_files.
@@ -220,6 +267,8 @@ read_file_list() {
     local target_real
     target_real="$(cd "$TARGET_DIR" && pwd -P)"
     sorted_files=()
+    file_ranges=()
+    local spec base note
     if [ "$source" = "-" ]; then
         exec 3<&0
     elif ! exec 3<"$source"; then
@@ -236,6 +285,25 @@ read_file_list() {
             *) path="$TARGET_DIR/$line"
                if [ ! -e "$path" ] && [ -e "$line" ]; then path="$PWD/$line"; fi ;;
         esac
+        spec=""
+        # FILE:START-END[,START-END] prints part of a file (a name that is a file stays whole)
+        if [ ! -f "$path" ] && [[ "$line" =~ ^(.+):([0-9]+(-[0-9]*)?(,[0-9]+(-[0-9]*)?)*)$ ]]; then
+            base="${BASH_REMATCH[1]}"
+            spec="${BASH_REMATCH[2]}"
+            case "$base" in
+                /*) path="$base" ;;
+                *) path="$TARGET_DIR/$base"
+                   if [ ! -e "$path" ] && [ -e "$base" ]; then path="$PWD/$base"; fi ;;
+            esac
+            if [ -f "$path" ]; then
+                if ! note=$(resolve_ranges "$spec" "$(awk 'END { print NR }' "$path")"); then
+                    problems+=("$line: $note")
+                    continue
+                fi
+                resolve_ranges "$spec" "$(awk 'END { print NR }' "$path")"
+                spec="$RESOLVED"
+            fi
+        fi
         if [ ! -f "$path" ]; then
             problems+=("not a file: $line")
             continue
@@ -245,14 +313,15 @@ read_file_list() {
             "$target_real"/*) rel="${real#"$target_real"/}" ;;
             *) problems+=("outside $TARGET_DIR: $line"); continue ;;
         esac
-        case "$seen" in *$'\n'"$rel"$'\n'*) continue ;; esac
-        seen="$seen$rel"$'\n'
+        case "$seen" in *$'\n'"$rel:$spec"$'\n'*) continue ;; esac
+        seen="$seen$rel:$spec"$'\n'
         [ "$real" = "$OUTPUT_REAL" ] && continue
         if is_binary "$path"; then
             binaries+=("$rel")
             continue
         fi
         sorted_files+=("$rel")
+        file_ranges+=("$spec")
     done
     exec 3<&-
     if [ ${#binaries[@]} -gt 0 ]; then
@@ -272,17 +341,40 @@ read_file_list() {
 
 # Function to write file content with markdown formatting
 write_file_content() {
-    local file="$1"
+    local file="$1" spec="${2:-}"
     local full_path="$TARGET_DIR/$file"
     local language=$(get_language_from_extension "$full_path")
     
     echo "" >> "$OUTPUT_FILE"
-    echo "## $file" >> "$OUTPUT_FILE"
+    if [ -n "$spec" ]; then
+        echo "## $file ($(ranges_label "$spec"))" >> "$OUTPUT_FILE"
+    else
+        echo "## $file" >> "$OUTPUT_FILE"
+    fi
     echo '```'"$language" >> "$OUTPUT_FILE"
-    # Use cat to preserve file content exactly, handling special characters
-    cat "$full_path" >> "$OUTPUT_FILE" 2>/dev/null || {
-        echo "Error reading file: $full_path" >> "$OUTPUT_FILE"
-    }
+    if [ -n "$spec" ]; then
+        # Only these lines; a marker between ranges says what is left out
+        local part start end previous=0
+        local IFS=','
+        for part in $spec; do
+            start="${part%-*}"; end="${part#*-}"
+            if [ "$previous" -gt 0 ]; then
+                if [ $((previous + 1)) -eq $((start - 1)) ]; then
+                    echo "... (line $((previous + 1)) not shown)" >> "$OUTPUT_FILE"
+                else
+                    echo "... (lines $((previous + 1))-$((start - 1)) not shown)" >> "$OUTPUT_FILE"
+                fi
+            fi
+            sed -n "${start},${end}p" "$full_path" >> "$OUTPUT_FILE"
+            previous="$end"
+        done
+        unset IFS
+    else
+        # Use cat to preserve file content exactly, handling special characters
+        cat "$full_path" >> "$OUTPUT_FILE" 2>/dev/null || {
+            echo "Error reading file: $full_path" >> "$OUTPUT_FILE"
+        }
+    fi
     echo "" >> "$OUTPUT_FILE"
     echo '```' >> "$OUTPUT_FILE"
 }
@@ -310,16 +402,22 @@ main() {
     if [ "$NO_TOC" != true ] && [ ${#sorted_files[@]} -gt 0 ]; then
         echo "# Table of Contents" >> "$OUTPUT_FILE"
         echo "" >> "$OUTPUT_FILE"
-        for file in "${sorted_files[@]}"; do
-            echo "- $file" >> "$OUTPUT_FILE"
+        local i
+        for ((i = 0; i < ${#sorted_files[@]}; i++)); do
+            if [ -n "${file_ranges[$i]:-}" ]; then
+                echo "- ${sorted_files[$i]} ($(ranges_label "${file_ranges[$i]}"))" >> "$OUTPUT_FILE"
+            else
+                echo "- ${sorted_files[$i]}" >> "$OUTPUT_FILE"
+            fi
         done
         echo "" >> "$OUTPUT_FILE"
         echo "---" >> "$OUTPUT_FILE"
     fi
     
     # Write all file contents
-    for file in "${sorted_files[@]}"; do
-        write_file_content "$file"
+    local k
+    for ((k = 0; k < ${#sorted_files[@]}; k++)); do
+        write_file_content "${sorted_files[$k]}" "${file_ranges[$k]:-}"
     done
     
     # Report results

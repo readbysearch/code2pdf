@@ -53,6 +53,12 @@ Convert exactly the files listed in
 (\- for standard input), one per line, in that order; relative to
 .I DIR
 (default \.) or absolute.
+.IB path : START \- END
+prints part of a file with its real line numbers (also
+.IB path : START \-\fR,\fP
+.IB path : LINE
+and several ranges separated by commas); the same form works with
+.BR \-s .
 .TP
 .BI \-\-include\-types " LIST"
 Only include these comma-separated extensions.

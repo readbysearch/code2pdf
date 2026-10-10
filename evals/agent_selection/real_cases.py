@@ -211,6 +211,90 @@ JUDGEMENT_CASES = [
                    "Source/Core/Session.swift\n' | code2pdf --files-from - -o {out}"),
 ]
 
+def block_end(path, start):
+    """Last line of the function or method starting at line START (1-based): the closing brace
+    at its indent for brace languages, else the last non-blank line before the indent returns."""
+    lines = open(path, encoding="utf-8").read().split("\n")
+    head = lines[start - 1]
+    indent = len(head) - len(head.lstrip())
+    braces = head.rstrip().endswith("{")
+    last = start
+    for n in range(start + 1, len(lines) + 1):
+        text = lines[n - 1]
+        if braces:
+            if text.strip().startswith("}") and len(text) - len(text.lstrip()) == indent:
+                return n
+            continue
+        if text.strip() and len(text) - len(text.lstrip()) <= indent and not text.strip().startswith(")"):
+            return last
+        if text.strip():
+            last = n
+    return last
+
+
+# Excerpts: "print only these functions, with the file's real line numbers". `functions` are
+# (file, first line, text that line starts with) in the pinned release; the grader wants each
+# function's first and last line printed with their own numbers, `forbidden` lines absent, and
+# the real file paths as bookmarks. Before v3.11, agents could only fake this with new files.
+EXCERPT_CASES = [
+    dict(id="gin-context-json-methods", project="gin",
+         request="From context.go, print only the gin.Context methods that write JSON responses "
+                 "(IndentedJSON, SecureJSON, JSONP, JSON, AsciiJSON, PureJSON), each whole, with "
+                 "the file's real line numbers. Nothing else from the file.",
+         expected=lambda r: ["context.go"],
+         functions=[("context.go", 979, "func (c *Context) IndentedJSON("), ("context.go", 986, "func (c *Context) SecureJSON("),
+                    ("context.go", 993, "func (c *Context) JSONP("), ("context.go", 1004, "func (c *Context) JSON("),
+                    ("context.go", 1010, "func (c *Context) AsciiJSON("), ("context.go", 1016, "func (c *Context) PureJSON(")],
+         forbidden=[("context.go", 182), ("context.go", 1022)],
+         why_hard="Six methods in a 1,267-line file; Next() and XML() must stay out.",
+         source="agent eval 2026-10-10: agents cut excerpts into made-up files",
+         reference="echo context.go:979-1019 | code2pdf --files-from - -o {out}"),
+    dict(id="flask-open-save-session", project="flask",
+         request="Print only the two methods where Flask opens and saves the session: "
+                 "RequestContext.push in src/flask/ctx.py and Flask.process_response in "
+                 "src/flask/app.py, each whole, with the files' real line numbers.",
+         expected=lambda r: ["src/flask/ctx.py", "src/flask/app.py"],
+         functions=[("src/flask/ctx.py", 367, "def push(self) -> None:"),
+                    ("src/flask/app.py", 1260, "def process_response(self")],
+         forbidden=[("src/flask/ctx.py", 251), ("src/flask/ctx.py", 396)],
+         why_hard="ctx.py has two push methods (AppContext.push at 251 is the wrong one).",
+         source="agent eval 2026-10-10: agents cut excerpts into made-up files",
+         reference="printf 'src/flask/ctx.py:367-395\nsrc/flask/app.py:1260-1290\n' | code2pdf --files-from - -o {out}"),
+    dict(id="express-dispatch", project="express",
+         request="Print only proto.handle from lib/router/index.js and Route.prototype.dispatch "
+                 "from lib/router/route.js, each whole, with the files' real line numbers.",
+         expected=lambda r: ["lib/router/index.js", "lib/router/route.js"],
+         functions=[("lib/router/index.js", 136, "proto.handle = function handle("),
+                    ("lib/router/route.js", 101, "Route.prototype.dispatch = function dispatch(")],
+         forbidden=[("lib/router/index.js", 97), ("lib/router/route.js", 184)],
+         why_hard="Two files, a long function each; their neighbours must stay out.",
+         source="agent eval 2026-10-10: agents cut excerpts into made-up files",
+         reference="printf 'lib/router/index.js:136-331\nlib/router/route.js:101-154\n' | code2pdf --files-from - -o {out}"),
+    dict(id="alamo-retry-decision", project="alamofire",
+         request="Print only Session's retry decision in Source/Core/Session.swift: the "
+                 "retrier(for:) and retryResult(for:dueTo:completion:) functions, each whole, with "
+                 "the file's real line numbers.",
+         expected=lambda r: ["Source/Core/Session.swift"],
+         functions=[("Source/Core/Session.swift", 1240, "func retrier(for request: Request)"),
+                    ("Source/Core/Session.swift", 1272, "public func retryResult(for request")],
+         forbidden=[("Source/Core/Session.swift", 32)],
+         why_hard="Two functions 30 lines apart in a 1,300-line file.",
+         source="agent eval 2026-10-10: agents cut excerpts into made-up files",
+         reference="echo Source/Core/Session.swift:1240-1300 | code2pdf --files-from - -o {out}"),
+    dict(id="gym-cartpole-step-reset", project="gymnasium",
+         request="Print only CartPoleEnv.step and CartPoleEnv.reset from "
+                 "gymnasium/envs/classic_control/cartpole.py, each whole, with the file's real line "
+                 "numbers. Not the vectorised CartPoleVectorEnv.",
+         expected=lambda r: ["gymnasium/envs/classic_control/cartpole.py"],
+         functions=[("gymnasium/envs/classic_control/cartpole.py", 164, "def step(self, action):"),
+                    ("gymnasium/envs/classic_control/cartpole.py", 228, "def reset(")],
+         forbidden=[("gymnasium/envs/classic_control/cartpole.py", 247),
+                    ("gymnasium/envs/classic_control/cartpole.py", 485)],
+         why_hard="The file has a second reset in CartPoleVectorEnv; render() follows reset().",
+         source="agent eval 2026-10-10: agents cut excerpts into made-up files",
+         reference="echo gymnasium/envs/classic_control/cartpole.py:164-246 | code2pdf --files-from - -o {out}"),
+]
+
 REAL_CASES = [
     dict(id="gym-package", project="gymnasium",
          request="Print the gymnasium package (the gymnasium/ folder): every Python file in it.",

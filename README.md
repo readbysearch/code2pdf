@@ -134,6 +134,8 @@ code2pdf -a . --exclude src/legacy                 # only this folder, not lib/l
 code2pdf -a . --include '*.json' --include .github # add what the defaults leave out
 code2pdf -a . --include-types swift,m              # only these extensions
 git ls-files src | code2pdf --files-from -         # exactly these files, in this order
+printf 'src/app.py:120-180\nsrc/util.py\n' | code2pdf --files-from -   # part of a file, all of another
+code2pdf -s src/app.py:120-180                     # part of one file
 code2pdf -a src -o ~/Desktop/src.pdf               # choose where the PDF goes
 ```
 
@@ -141,7 +143,7 @@ code2pdf -a src -o ~/Desktop/src.pdf               # choose where the PDF goes
 |--------|--------|
 | `--exclude GLOB` | Leave out matching files and folders. Wins over everything else. |
 | `--include GLOB` | Also include matching files of any type, even hidden ones or ones in skipped folders. A folder (`--include config`) brings every file in it. |
-| `--files-from FILE` | Convert exactly the files listed in `FILE` (`-` for stdin), one per line, in that order: relative to the directory (default `.`) or absolute. Only `--exclude` and the binary check apply. |
+| `--files-from FILE` | Convert exactly the files listed in `FILE` (`-` for stdin), one per line, in that order: relative to the directory (default `.`) or absolute. Only `--exclude` and the binary check apply. `path:START-END` prints part of a file (see below). |
 | `--include-types LIST` | Only these extensions (replaces the default list). |
 | `--ignore-types LIST` | Skip these extensions. |
 | `--ignore-folders LIST` | Skip folders with these names, at any depth. |
@@ -155,6 +157,17 @@ within a name and don't match a leading dot, `**` matches any number of folders.
 folders are entered only when a glob names them literally (`.github`, `node_modules/foo`), so
 `--include '*'` never pulls in `node_modules` or `.git`. A glob that matches nothing prints a
 warning, and unknown options are errors.
+
+#### Printing part of a file
+
+Write `path:START-END` instead of `path`, in a `--files-from` list or after `-s`. The PDF
+keeps the real path and the file's own line numbers, marks what is left out ("lines 1–119
+not shown"), and says which lines it shows ("Python, lines 120–180 of 1,284"). Also
+`path:120-` (to the end), `path:57` (one line) and `path:10-40,90-120` (several ranges, shown
+in file order). An end past the file's end is cut to it, with a note; a start past the end
+is an error. A name that is itself an existing file is always printed whole. `--list-files`
+prints the same form, so its output can be fed back to `--files-from`. code2txt takes the same
+form: the heading says which lines it holds, and `... (lines 41-89 not shown)` marks a gap.
 
 #### Using code2pdf from a coding agent
 
@@ -273,7 +286,7 @@ code2txt --help
 | `--no-toc` | Skip table of contents generation | false |
 | `--verbose` | Show processing details | false |
 | `--ignore-files` | Specific file names to skip (comma-separated) | - |
-| `--files-from FILE` | Use exactly the files listed in `FILE` (`-` for stdin), in that order; the filters don't apply, binary files are skipped | - |
+| `--files-from FILE` | Use exactly the files listed in `FILE` (`-` for stdin), in that order; the filters don't apply, binary files are skipped; `path:START-END` for part of a file | - |
 | `-V, --version` | Show the version and how it is installed | - |
 
 ## Fonts

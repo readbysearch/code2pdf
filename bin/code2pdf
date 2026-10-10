@@ -45,7 +45,7 @@ Usage: code2pdf [OPTIONS] -s FILE
        code2pdf [OPTIONS] -a DIR
 
 Options:
-  -s, --single FILE         Convert one file to <name>.pdf in the current folder
+  -s, --single FILE         Convert one file to <name>.pdf in the current folder (FILE:START-END: part of it)
   -a, --all DIR             Convert the source files in DIR to DIR/merged.pdf, contents page first
   -o, --output PDF          Write the PDF here instead (a folder: the default name inside it;
                             missing folders are created)
@@ -62,7 +62,9 @@ Choosing files for -a (every option can be repeated; LIST is comma-separated):
                             skipped folders; a folder (--include config) brings every file in it
   --exclude GLOB            Leave out matching files and folders (wins over everything else)
   --files-from FILE         Convert exactly the files listed in FILE, one per line, in that order
-                            (- reads stdin; paths relative to DIR or absolute; DIR defaults to .)
+                            (- reads stdin; paths relative to DIR or absolute; DIR defaults to .).
+                            path:START-END prints part of a file with its real line numbers
+                            (also path:START-, path:LINE, path:10-40,90-120)
   --include-types LIST      Only include these extensions (replaces the default list)
   --ignore-types LIST       Skip these extensions
   --ignore-folders LIST     Skip folders with these names, at any depth
@@ -85,6 +87,7 @@ Examples:
   code2pdf -a . --exclude src/legacy --include '*.json' --include .github
   code2pdf -a . --include-types js,ts                          # Only JS/TS files
   git ls-files src | code2pdf --files-from - -o src.pdf        # Exactly these files
+  printf 'app.py:120-180\nutil.py\n' | code2pdf --files-from -  # Part of app.py, all of util.py
   code2pdf -a src/ --theme mono                                # Black & white for printing
 HELP
 }

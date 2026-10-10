@@ -176,10 +176,10 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
         queue = context.Queue()
         job_list = []
         for part, indexes in enumerate(groups_of_files):
-            part_entries = [entries[i] for i in indexes]
+            part_entries = [tuple(entries[i]) for i in indexes]  # plain tuples cross into spawn workers
             job_list.append({
                 "part": part, "first_index": indexes[0], "entries": part_entries, "theme": theme.name,
-                "summary": info.summary, "labels": {rel: info.files.get(rel) for rel, _ in part_entries},
+                "summary": info.summary, "labels": {rel: info.files.get(rel) for rel, *_ in part_entries},
                 "title": title, "printed_moment": printed_moment, "root": root,
                 "output": os.path.join(tmp, f"part{part:04d}.pdf"),
             })
@@ -218,8 +218,8 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
 
         # Global page numbers: contents first, then the parts in order
         progress.assembling()
-        sections_lines = sum(dir_to_pdf.count_lines(sources[path]) for _, path in entries)
-        groups = dir_to_pdf.group_by_folder([rel for rel, _ in entries])
+        sections_lines = sum(dir_to_pdf.count_lines(text) for text in dir_to_pdf.printed_sources(entries, sources))
+        groups = dir_to_pdf.group_by_folder(dir_to_pdf.contents_labels(entries))
         part_offsets, offset = [], 0
         for result in results:
             part_offsets.append(offset)
@@ -289,7 +289,7 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
                     target = starts[int(str(uri)[len("code2pdf:f"):])] - 1
                     annot[NameObject("/Dest")] = ArrayObject([writer.pages[target].indirect_reference, NameObject("/Fit")])
                     del annot["/A"]
-        for i, (rel, _) in enumerate(entries):
+        for i, (rel, *_) in enumerate(entries):
             writer.add_outline_item(rel, starts[i] - 1)
         writer.add_metadata({"/Title": title, "/Creator": "code2pdf", "/CreationDate": _pdf_date(printed_moment),
                              "/Producer": "WeasyPrint, pypdf"})

@@ -21,6 +21,10 @@ and lessons that were expensive to learn.
   `read_file_list` takes them from `--files-from`; `source_info` gets git dates;
   `build_sections`/`build_contents`/`wrap_document` build the HTML; `render_document`
   renders it, or hands big documents to `parts.py`.
+- Part of a file: an `Entry(rel, path, ranges)` carries 1-based inclusive ranges
+  (`split_ranges`/`resolve_ranges`). The whole file is highlighted, then `excerpt_html` keeps
+  the selected line spans and adds `span.gap` markers whose inline `counter-reset` keeps the
+  file's own line numbers. Entries cross into parts workers as plain tuples.
 - Selection precedence: `--exclude` > `--include` > default rules (built-in lists, `--ignore-*`,
   `--include-types`). `Pattern.may_reach` decides whether to enter a normally skipped folder:
   only a literal glob segment may name one, so `*`/`**` never pull in `node_modules` or `.git`.
