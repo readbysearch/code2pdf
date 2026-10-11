@@ -258,6 +258,42 @@ ranges_label() {
     if [ "$count" -eq 1 ] && [ -n "$single" ]; then echo "line $single"; else echo "lines ${out#, }"; fi
 }
 
+# Ranges of SPEC ("367-391,400-410") in FILE that stop inside an indented block, one
+# "start end last" per line: the lines after END indented deeper than the range's first line,
+# plus a closing } ) ] or `end` at that line's indent, belong to the same block (as code2pdf).
+cut_blocks() {
+    awk -v spec="$2" '
+        function indent(s,    i, c, n) {
+            n = 0
+            for (i = 1; i <= length(s); i++) {
+                c = substr(s, i, 1)
+                if (c == " ") n++
+                else if (c == "\t") n += 8 - n % 8
+                else break
+            }
+            return n
+        }
+        { line[NR] = $0 }
+        END {
+            count = split(spec, parts, ",")
+            for (k = 1; k <= count; k++) {
+                split(parts[k], se, "-"); start = se[1] + 0; end = se[2] + 0
+                base = -1
+                for (n = start; n <= end; n++) if (line[n] ~ /[^ \t]/) { base = indent(line[n]); break }
+                if (base < 0) continue
+                last = end
+                for (n = end + 1; n <= NR; n++) {
+                    if (line[n] !~ /[^ \t]/) continue
+                    if (indent(line[n]) > base) { last = n; continue }
+                    rest = line[n]; sub(/^[ \t]+/, "", rest)
+                    if (indent(line[n]) == base && rest ~ /^([\])}]|end([^A-Za-z0-9_]|$))/) last = n
+                    break
+                }
+                if (last > end) print start, end, last
+            }
+        }' "$1"
+}
+
 # --files-from: exactly the listed files, in the listed order. Paths are relative to TARGET_DIR
 # (or to the current folder), or absolute; they must be inside TARGET_DIR. Binary files are
 # skipped; missing files are errors. Sets sorted_files.
@@ -268,6 +304,7 @@ read_file_list() {
     target_real="$(cd "$TARGET_DIR" && pwd -P)"
     sorted_files=()
     file_ranges=()
+    cut_warnings=()
     local spec base note
     if [ "$source" = "-" ]; then
         exec 3<&0
@@ -322,6 +359,13 @@ read_file_list() {
         fi
         sorted_files+=("$rel")
         file_ranges+=("$spec")
+        if [ -n "$spec" ]; then
+            local cut_start cut_end cut_last
+            while read -r cut_start cut_end cut_last; do
+                [ -z "$cut_start" ] && continue
+                cut_warnings+=("Warning: $rel:$cut_start-$cut_end stops inside a block that goes on to line $cut_last; to print it whole, use $rel:$(printf '%s' ",$spec," | sed "s/,$cut_start-$cut_end,/,$cut_start-$cut_last,/; s/^,//; s/,\$//")")
+            done <<< "$(cut_blocks "$path" "$spec")"
+        fi
     done
     exec 3<&-
     if [ ${#binaries[@]} -gt 0 ]; then
@@ -427,6 +471,9 @@ main() {
         echo "Output written to: $OUTPUT_FILE" >&2
     fi
     
+    local warning
+    for warning in ${cut_warnings[@]+"${cut_warnings[@]}"}; do echo "$warning" >&2; done
+
     # Check if any files were processed
     if [ ${#sorted_files[@]} -eq 0 ]; then
         echo "Warning: No files were processed. Check your filters and target directory." >&2

@@ -42,7 +42,8 @@ def project(temp_dir):
 
 
 def code2pdf(args, cwd, stdin=None, env_extra=None):
-    env = dict(os.environ, CODE2PDF_QUIET="1", **(env_extra or {}))
+    env = dict(os.environ, CODE2PDF_QUIET="1")
+    env.update(env_extra or {})
     return subprocess.run([str(CODE2PDF), *args], cwd=cwd, input=stdin, capture_output=True,
                           text=True, timeout=180, env=env)
 
@@ -87,6 +88,63 @@ def test_resolve_ranges_sorts_merges_and_clamps():
         dir_to_pdf.resolve_ranges(((9, 3),), 20)
     with pytest.raises(ValueError, match="line numbers start at 1"):
         dir_to_pdf.resolve_ranges(((0, 3),), 20)
+
+
+FUNCS = {
+    "f.py": "import os\n\ndef load(path):\n    if path:\n        return open(path)\n    return None\n\ndef save():\n    pass\n",
+    "f.go": "package x\n\nfunc Load() int {\n\tif true {\n\t\treturn 1\n\t}\n\treturn 0\n}\n",
+    "f.js": "proto.handle = function handle(req) {\n  next();\n  function next() {\n    go();\n  }\n};\n",
+}
+
+
+@pytest.mark.parametrize("name, ranges, expected", [
+    ("f.py", ((3, 5),), [(3, 5, 6)]),       # the last statement left out
+    ("f.py", ((3, 4),), [(3, 4, 6)]),
+    ("f.py", ((3, 6),), []),                # the whole function
+    ("f.py", ((3, 7),), []),
+    ("f.py", ((4, 4),), [(4, 4, 5)]),       # an `if` without its body
+    ("f.py", ((5, 5),), []),                # one line from inside a body
+    ("f.go", ((3, 7),), [(3, 7, 8)]),       # without the closing brace
+    ("f.go", ((3, 5),), [(3, 5, 8)]),
+    ("f.go", ((3, 8),), []),
+    ("f.js", ((1, 5),), [(1, 5, 6)]),       # `};` at the function's own indent
+    ("f.js", ((1, 6),), []),
+    ("f.py", ((3, 4), (8, 8)), [(3, 4, 6), (8, 8, 9)]),
+])
+def test_cut_blocks(name, ranges, expected):
+    assert dir_to_pdf.cut_blocks(FUNCS[name], ranges) == expected
+
+
+def test_a_range_that_cuts_a_function_short_is_warned_about(temp_dir):
+    for name, text in FUNCS.items():
+        (temp_dir / name).write_text(text)
+    result = code2pdf(["--files-from", "-", "--list-files"], temp_dir, stdin="f.py:3-5\nf.go:3-8\nf.js:1-5,6\n")
+    assert result.returncode == 0, result.stderr
+    assert result.stderr.splitlines() == [
+        "Warning: f.py:3-5 stops inside a block that goes on to line 6; to print it whole, use f.py:3-6"]
+    assert result.stdout.split() == ["f.py:3-5", "f.go:3-8", "f.js:1-6"]  # still printed as asked
+
+
+@needs_render
+def test_the_warning_is_repeated_after_done(temp_dir):
+    (temp_dir / "f.py").write_text(FUNCS["f.py"])
+    result = code2pdf(["--files-from", "-", "-o", str(temp_dir / "x.pdf")], temp_dir, stdin="f.py:3-4\n",
+                      env_extra={"CODE2PDF_QUIET": ""})
+    assert result.returncode == 0, result.stderr
+    lines = result.stderr.splitlines()
+    warning = "Warning: f.py:3-4 stops inside a block that goes on to line 6; to print it whole, use f.py:3-6"
+    assert lines.count(warning) == 2 and lines[-1] == warning, lines  # agents often keep only the tail
+
+
+def test_code2txt_warns_the_same_way(temp_dir):
+    for name, text in FUNCS.items():
+        (temp_dir / name).write_text(text)
+    result = subprocess.run([str(CODE2TXT), "--files-from", "-", "-o", str(temp_dir / "o.md")], cwd=temp_dir,
+                            input="f.py:3-5\nf.go:3-5\nf.js:1-6\n", capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [l for l in result.stderr.splitlines() if l.startswith("Warning")] == [
+        "Warning: f.py:3-5 stops inside a block that goes on to line 6; to print it whole, use f.py:3-6",
+        "Warning: f.go:3-5 stops inside a block that goes on to line 8; to print it whole, use f.go:3-8"]
 
 
 # --- code2pdf --------------------------------------------------------------------------------

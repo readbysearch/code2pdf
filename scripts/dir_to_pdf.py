@@ -89,6 +89,55 @@ def resolve_ranges(ranges, total):
     return tuple(merged), note
 
 
+_CLOSER = re.compile(r"[}\])]|end\b")
+
+
+def _indent(line):
+    return len(line) - len(line.expandtabs(8).lstrip())
+
+
+def cut_blocks(source, ranges):
+    """[(start, end, block_end)] for each range that stops inside an indented block, such as a
+    function whose last lines are left out. Indentation only, so it works for any language:
+    the lines after END that are indented deeper than the range's first line, plus a closing
+    `}`, `)`, `]` or `end` at that line's own indent, belong to the same block."""
+    lines = source.expandtabs(8).split("\n")
+    found = []
+    for start, end in ranges:
+        head = next((line for line in lines[start - 1:end] if line.strip()), None)
+        if head is None:
+            continue
+        base, last = _indent(head), end
+        for n in range(end, len(lines)):  # lines[n] is line n + 1
+            line = lines[n]
+            if not line.strip():
+                continue
+            if _indent(line) > base:
+                last = n + 1
+                continue
+            if _indent(line) == base and _CLOSER.match(line.lstrip()):
+                last = n + 1
+            break
+        if last > end:
+            found.append((start, end, last))
+    return found
+
+
+def cut_block_warnings(entries, sources):
+    """One line per range that seems to stop before the end of its block."""
+    warnings = []
+    for entry in entries:
+        if not entry.ranges:
+            continue
+        source = sources[entry.path]
+        for start, end, last in cut_blocks(source, entry.ranges):
+            longer = [(a, last if (a, b) == (start, end) else b) for a, b in entry.ranges]
+            whole = range_spec(entry.rel, resolve_ranges(longer, count_lines(source))[0])
+            warnings.append(f"Warning: {entry.rel}:{start}-{end} stops inside a block that goes on to "
+                            f"line {last}; to print it whole, use {whole}")
+    return warnings
+
+
 def ranges_text(ranges, dash="–", sep=", "):
     """((12, 14), (18, 18)) -> '12–14, 18'"""
     return sep.join(f"{a}" if a == b else f"{a}{dash}{b}" for a, b in ranges)
@@ -655,6 +704,9 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
     sources = {e.path: read_source(e.path) for e in entries}
     printed = printed_sources(entries, sources)
     cjk_reminder = warn_missing_cjk_fonts(printed + [e.rel for e in entries])
+    cut_warnings = cut_block_warnings(entries, sources)
+    for line in cut_warnings:
+        print(line, file=sys.stderr)
     progress = progress_report.Progress(
         sys.stderr, files=len(entries), lines=sum(count_lines(text) for text in printed),
         estimated_pages=progress_report.estimate_pages(printed, contents=contents), quiet=quiet)
@@ -689,8 +741,8 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
             if os.path.exists(tmp):
                 os.remove(tmp)
         progress.done(pages=pages, output=output)
-        if cjk_reminder:
-            print(cjk_reminder, file=sys.stderr)
+        for line in cut_warnings + ([cjk_reminder] if cjk_reminder else []):
+            print(line, file=sys.stderr)
         return
 
     document = build_html(entries, theme, project, moment, info, contents=contents, sources=sources)
@@ -708,8 +760,8 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
         if os.path.exists(tmp):
             os.remove(tmp)
     progress.done(pages=len(rendered.pages), output=output)
-    if cjk_reminder:
-        print(cjk_reminder, file=sys.stderr)
+    for line in cut_warnings + ([cjk_reminder] if cjk_reminder else []):  # again, after "Done:"
+        print(line, file=sys.stderr)
 
 
 def exit_on_signals():
@@ -783,6 +835,10 @@ def main(argv=None):
     for option, text in selector.unused_patterns():
         print(f"Warning: {option} {text!r} matched nothing", file=sys.stderr)
     if args.list_files:
+        listed = [Entry(rel, os.path.join(root, rel), ranges) for rel, ranges in files if ranges]
+        texts = {e.path: open(e.path, encoding="utf-8", errors="replace").read() for e in listed}
+        for line in cut_block_warnings(listed, texts):
+            print(line, file=sys.stderr)
         print("\n".join(range_spec(rel, ranges) for rel, ranges in files))
         return 0
     if not files:
