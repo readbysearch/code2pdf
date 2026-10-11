@@ -1,0 +1,14 @@
+{
+  "name": "code2pdf",
+  "description": "The code2pdf skill: print source code as a PDF, or bundle it into one text file for an LLM.",
+  "owner": {
+    "name": "readbysearch"
+  },
+  "plugins": [
+    {
+      "name": "code2pdf",
+      "source": "./plugins/code2pdf",
+      "description": "Print source code as a PDF, or bundle it into one text file for an LLM, with the code2pdf and code2txt tools."
+    }
+  ]
+}

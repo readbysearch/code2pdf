@@ -62,6 +62,12 @@ PROMPT = """{request}
 
 Use code2pdf (it's installed) and save the PDF as {output}. I'm not around to answer questions, \
 so don't ask; just get it right. Don't change or add anything inside the project."""
+# The same request without naming the tool: does the agent find code2pdf (with or without the
+# skill), or write its own PDF script?
+PROMPT_PLAIN = """{request}
+
+Save the PDF as {output}. I'm not around to answer questions, so don't ask; just get it right. \
+Don't change or add anything inside the project."""
 PROMPT_TXT = """{request}
 
 I want it as one text file for an LLM's context: use code2txt (it's installed) and save it as \
@@ -106,12 +112,12 @@ def select(which, case_set="all"):
     ids = {"train": train, "test": test, "all": [c["id"] for c in CASES]}.get(which)
     if ids is None:
         return which.split(",")
-    return [i for i in ids if case_set == "all" or BY_ID[i]["set"] == case_set]
+    return [i for i in ids if case_set == "all" or BY_ID[i]["set"] in case_set.split(",")]
 
 
 # --- install a clean copy of code2pdf -----------------------------------------------------
 
-def install_copy(dest, ref=None, tool="code2pdf"):
+def install_copy(dest, ref=None, tool="code2pdf", skill=False):
     """bin/, scripts/, fonts/ (from the working tree, or from git REF such as v3.8) and a copy
     of .venv, with nothing that names this repository."""
     os.makedirs(dest)
@@ -149,6 +155,8 @@ def install_copy(dest, ref=None, tool="code2pdf"):
                 shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
         shutil.rmtree(os.path.join(dest, "venv"))
         shutil.rmtree(os.path.join(dest, "fonts"))
+    if skill:  # the plugin as users get it, next to the install so nothing points back here
+        shutil.copytree(os.path.join(REPO, "plugins", "code2pdf"), os.path.join(dest, "plugin"))
     leak = subprocess.run(["grep", "-rIl", REPO, dest], capture_output=True, text=True).stdout.strip()
     if leak:
         raise SystemExit(f"install copy still names {REPO}:\n{leak}")
@@ -258,6 +266,46 @@ def printed_lines(pdf):
     return found
 
 
+def content_check(case, pdf, files):
+    """Which project files' text is in the PDF, whatever made it: for PDFs without bookmarks
+    (agents that didn't find code2pdf print with cupsfilter or a script of their own). A file
+    counts as printed when most of its distinctive lines (12-70 characters, found in no other
+    file) are in the PDF's text. Returns (missing, extra); the order isn't checked."""
+    text = re.sub(r"\s+", " ", subprocess.run(["pdftotext", pdf, "-"], capture_output=True,
+                                               text=True).stdout)
+    lines, counts = {}, {}
+    for rel, data in files.items():
+        if b"\0" in data[:8192] or _ignorable(rel):
+            continue
+        own = {re.sub(r"\s+", " ", line.strip()) for line in data.decode("utf-8", "replace").split("\n")}
+        lines[rel] = own
+        for line in own:
+            counts[line] = counts.get(line, 0) + 1
+    printed = set()
+    for rel, own in lines.items():
+        marks = sorted(line for line in own if 12 <= len(line) <= 70 and counts[line] == 1)
+        if marks:
+            sample = marks[::max(1, len(marks) // 5)][:5]
+            if sum(line in text for line in sample) * 2 > len(sample):
+                printed.add(rel)
+    expected = set(case["expected"])
+    if case.get("match") == "basename":
+        expected = {rel for rel in lines if os.path.basename(rel) in expected}
+    expected &= {rel for rel in lines if any(12 <= len(l) <= 70 and counts[l] == 1 for l in lines[rel])}
+    # An extra file must be confirmed by 3+ lines found nowhere else, not even inside another
+    # file's lines: LICENSE text recurs in every source header, docs are quoted in docstrings
+    blob = "\n".join(re.sub(r"\s+", " ", data.decode("utf-8", "replace")) for rel, data in files.items()
+                     if rel in lines)
+    extra = []
+    for rel in sorted(printed - expected - set(case.get("allowed", []))):
+        own = re.sub(r"\s+", " ", files[rel].decode("utf-8", "replace"))
+        marks = [line for line in sorted(lines[rel]) if 12 <= len(line) <= 70 and counts[line] == 1
+                 and blob.count(line) == own.count(line)][:9]
+        if len(marks) >= 3 and sum(line in text for line in marks) * 2 > len(marks):
+            extra.append(rel)
+    return sorted(expected - printed), extra
+
+
 def excerpt_problems(case, pdf, project):
     """For EXCERPT cases: each function's first and last line printed with its own number,
     forbidden lines absent. (All files of a case share one printed-lines set; their line
@@ -314,6 +362,14 @@ def grade(case, output, before, after, tool="code2pdf", project=None):
         result["files_ok"] = result["files_ok"] and not result["excerpt_problems"]
     result["pass"] = bool(result["pdf"] and result["files_ok"] and result["order_ok"] is not False
                           and not result["project_changed"])
+    # Tool-independent: the right code is in the PDF, however it was made (no bookmarks needed)
+    if result["pdf"] and tool == "code2pdf":
+        if case.get("functions"):
+            content_ok = project is not None and not result.get("excerpt_problems")
+        else:
+            result["content_missing"], result["content_extra"] = content_check(case, output, before)
+            content_ok = not result["content_missing"] and not result["content_extra"]
+        result["content_ok"] = bool(content_ok and not result["project_changed"])
     return result
 
 
@@ -340,12 +396,15 @@ def run_one(case, rep, args, bin_dir, transcripts):
         if args.tool == "code2txt":
             output_rel, output = output_rel[:-4] + ".md", output[:-4] + ".md"
         before = projects.snapshot(project)
-        prompt = (PROMPT_TXT if args.tool == "code2txt" else PROMPT).format(request=case["request"],
-                                                                             output=output_rel)
+        template = PROMPT_TXT if args.tool == "code2txt" else PROMPT_PLAIN if args.prompt == "plain" else PROMPT
+        prompt = template.format(request=case["request"], output=output_rel)
+        tools = ["Bash", "Read", "Glob", "Grep"] + (["Skill"] if args.skill or args.prompt == "plain" else [])
         cmd = [CLAUDE, "-p", prompt, "--model", args.model, "--setting-sources", "project",
-               "--permission-mode", "dontAsk", "--allowedTools", "Bash", "Read", "Glob", "Grep",
+               "--permission-mode", "dontAsk", "--allowedTools", *tools,
                "--output-format", "stream-json", "--verbose", "--no-session-persistence",
                "--max-budget-usd", str(args.max_budget)]
+        if args.skill:
+            cmd += ["--plugin-dir", os.path.join(os.path.dirname(bin_dir), "plugin")]
         if args.effort:
             cmd += ["--effort", args.effort]
         started = time.time()
@@ -382,7 +441,7 @@ def run_one(case, rep, args, bin_dir, transcripts):
 
 
 def transcript_stats(stream):
-    commands, final, cost, turns, api_error = [], None, None, None, None
+    commands, final, cost, turns, api_error, skills = [], None, None, None, None, []
     for line in stream.splitlines():
         try:
             event = json.loads(line)
@@ -392,6 +451,8 @@ def transcript_stats(stream):
             for block in event.get("message", {}).get("content", []):
                 if block.get("type") == "tool_use" and block.get("name") == "Bash":
                     commands.append(block.get("input", {}).get("command", ""))
+                elif block.get("type") == "tool_use" and block.get("name") == "Skill":
+                    skills.append(block.get("input", {}).get("skill", ""))
         elif event.get("type") == "result":
             final, cost, turns = event.get("result"), event.get("total_cost_usd"), event.get("num_turns")
             if event.get("is_error") and event.get("subtype") != "success":
@@ -399,18 +460,21 @@ def transcript_stats(stream):
     code2pdf = [c for c in commands if "code2pdf" in c or "code2txt" in c]
     return {"commands": commands, "final": final, "cost_usd": cost, "turns": turns,
             "code2pdf_calls": len(code2pdf), "used_list_files": any("--list-files" in c for c in code2pdf),
-            "read_help": any("--help" in c or " -h" in c for c in code2pdf), "api_error": api_error}
+            "read_help": any("--help" in c or " -h" in c for c in code2pdf), "api_error": api_error,
+            "skills": skills}
 
 
 def cmd_run(args):
-    ids = [i for i in select(args.split, args.set) if applies(BY_ID[i], args.tool)]
+    ids = [i for i in select(args.split, args.set) if applies(BY_ID[i], args.tool)
+           and not (args.prompt == "plain" and "code2pdf" in BY_ID[i]["request"])]
     out_dir = os.path.join(RESULTS, args.label)
     transcripts = os.path.join(out_dir, "transcripts")
     os.makedirs(transcripts, exist_ok=True)
     install = tempfile.mkdtemp(prefix="c2p-install-")
-    bin_dir = install_copy(os.path.join(install, "code2pdf"), args.ref, args.tool)
+    bin_dir = install_copy(os.path.join(install, "code2pdf"), args.ref, args.tool, args.skill)
     with open(os.path.join(out_dir, "meta.json"), "w") as f:
         json.dump({"label": args.label, "model": args.model, "ref": args.ref, "tool": args.tool, "effort": args.effort, "repeats": args.repeats,
+                   "prompt": args.prompt, "skill": args.skill,
                    "cases": ids, "split": args.split, "started": datetime.datetime.now().isoformat(),
                    "commit": subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"],
                                             capture_output=True, text=True).stdout.strip(),
@@ -448,9 +512,11 @@ def cmd_rerun_infra(args):
     flagged = [r for r in runs if r["infra_error"]]
     print(f"{args.label}: re-running {len(flagged)} runs one at a time")
     run_args = argparse.Namespace(model=meta["model"], effort=meta["effort"], jobs=1, tool=meta.get("tool", "code2pdf"),
-                                  max_budget=args.max_budget)
+                                  max_budget=args.max_budget, prompt=meta.get("prompt", "named"),
+                                  skill=meta.get("skill", False))
     install = tempfile.mkdtemp(prefix="c2p-install-")
-    bin_dir = install_copy(os.path.join(install, "code2pdf"), meta.get("ref"), meta.get("tool", "code2pdf"))
+    bin_dir = install_copy(os.path.join(install, "code2pdf"), meta.get("ref"), meta.get("tool", "code2pdf"),
+                           run_args.skill)
     transcripts = os.path.join(out_dir, "transcripts")
     replaced = {}
     for r in flagged:
@@ -503,7 +569,7 @@ def cmd_check(args):
     for case in CASES:
         if args.cases and case["id"] not in args.cases.split(","):
             continue
-        if args.set != "all" and case["set"] != args.set:
+        if args.set != "all" and case["set"] not in args.set.split(","):
             continue
         workdir = tempfile.mkdtemp(prefix="c2p-check-")
         try:
@@ -529,6 +595,9 @@ def cmd_check(args):
                 problems.append("grader verdict changed between two runs")
             if not first["pass"]:
                 problems.append(f"reference fails: {describe_failure(first)} {proc.stderr.strip()[-200:]}")
+            if first.get("content_ok") is False:
+                problems.append(f"content check fails on the reference: missing {first.get('content_missing')}, "
+                                f"extra {first.get('content_extra')}")
             # A naive answer (`code2pdf -a .`) must fail, or the case tests nothing; its file
             # list decides that without rendering a whole repository
             naive = subprocess.run(["code2pdf", "-a", ".", "--list-files"], cwd=project, env=env,
@@ -587,7 +656,11 @@ def summarize(runs):
     secs = [r["seconds"] for r in graded]
     return {"runs": len(runs), "infra": len(runs) - len(graded), "pass": point, "lo": lo, "hi": hi,
             "cost": statistics.mean(costs) if costs else 0, "seconds": statistics.median(secs) if secs else 0,
-            "list_files": statistics.mean([r["used_list_files"] for r in graded]) if graded else 0}
+            "list_files": statistics.mean([r["used_list_files"] for r in graded]) if graded else 0,
+            "content": statistics.mean([bool(r.get("content_ok")) for r in graded]) if graded else 0,
+            "used_tool": statistics.mean([r["code2pdf_calls"] > 0 for r in graded]) if graded else 0,
+            "skill": statistics.mean([any("code2pdf" in k for k in r.get("skills", [])) for r in graded])
+                     if graded else 0}
 
 
 def report(labels):
@@ -612,7 +685,9 @@ def report(labels):
         s = line.get("all") or {}
         print(f"{line['label']:28} " + "  ".join(parts)
               + f"  ${s.get('cost', 0):.3f}/run, {s.get('seconds', 0):.0f}s median, "
-                f"--list-files {s.get('list_files', 0):.0%}, infra errors {s.get('infra', 0)}")
+                f"--list-files {s.get('list_files', 0):.0%}, infra errors {s.get('infra', 0)}, "
+                f"used the tool {s.get('used_tool', 0):.0%}, skill {s.get('skill', 0):.0%}, "
+                f"right content {s.get('content', 0):.0%}")
     print()
     print(f"{'case':24}" + "".join(f"{lab[:14]:>16}" for lab in labels))
     for case in CASES:
@@ -678,6 +753,9 @@ def main():
     p.add_argument("--set", default="all", help="fixtures, real or all")
     p.add_argument("--ref", default=None, help="test code2pdf as of this git ref (default: working tree)")
     p.add_argument("--tool", default="code2pdf", choices=["code2pdf", "code2txt"])
+    p.add_argument("--prompt", default="named", choices=["named", "plain"],
+                   help="named: the prompt says to use code2pdf; plain: it doesn't")
+    p.add_argument("--skill", action="store_true", help="load the code2pdf plugin (plugins/code2pdf)")
     p.add_argument("--jobs", type=int, default=6)
     p.add_argument("--max-budget", type=float, default=1.0)
     p = sub.add_parser("rerun-infra")

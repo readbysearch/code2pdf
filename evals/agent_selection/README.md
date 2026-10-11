@@ -74,6 +74,25 @@ text file, graded from its contents list. Only the tool being measured is instal
 both installed, agents let code2pdf pick the files for code2txt. Single-file cases, scale
 cases and cases phrased "code2pdf's normal selection" don't apply to code2txt.
 
+## Finding the tool (the skill)
+
+The prompt normally says "Use code2pdf (it's installed)". `--prompt plain` leaves that out, as a
+user who doesn't know code2pdf would; cases whose request names code2pdf are skipped.
+`--skill` loads a copy of the plugin (`plugins/code2pdf`) with `--plugin-dir`, and both arms
+may use the Skill tool. Reported per arm:
+
+- **used the tool**: the share of runs that ran code2pdf at all;
+- **skill**: the share that invoked the code2pdf skill;
+- **right content**: the right code is in the PDF, however it was made. Agents without
+  code2pdf print with `cupsfilter` or a script of their own, which has no bookmarks, so the
+  main grade fails them. This check reads the PDF's text instead. A file counts as printed when
+  most of its distinctive lines are in it: lines of 12–70 characters that occur in no other
+  file. An extra file needs three such lines that occur nowhere else, not even inside other
+  lines, because LICENSE text recurs in source headers. Excerpt cases use the line-number
+  check. Order isn't checked. `check` confirms that every reference solution passes it. The
+  naive `-a .` fails it in 26 of 27 fixtures; in relay-legacy its one extra file is too small
+  to confirm.
+
 ## Running
 
 ```bash
@@ -83,6 +102,8 @@ cases and cases phrased "code2pdf's normal selection" don't apply to code2txt.
 .venv/bin/python evals/agent_selection/run.py run --label v38 --ref v3.8      # an older release
 .venv/bin/python evals/agent_selection/run.py run --label txt --tool code2txt
 .venv/bin/python evals/agent_selection/run.py rerun-infra txt                  # re-judge flagged runs alone
+.venv/bin/python evals/agent_selection/run.py run --label plain --prompt plain          # without naming the tool
+.venv/bin/python evals/agent_selection/run.py run --label skill --prompt plain --skill  # ... with the skill
 .venv/bin/python evals/agent_selection/run.py report base-sonnet opus
 ```
 
