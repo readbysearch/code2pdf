@@ -6,13 +6,17 @@ command-line tools. The PDF has a contents page, syntax highlighting, the files'
 numbers and a bookmark per file.
 
 Claude uses the skill when you ask for code in a PDF or on paper, even if you don't name the
-tool. For example, "make me a PDF of the backend for tomorrow's review" or "print these two
-functions with their real line numbers". The skill tells Claude:
+tool. For example, "make me a PDF of the backend for tomorrow's review", "print these two
+functions with their real line numbers" or "print my last commit for review, with the changes
+marked". The skill tells Claude:
 
 - how to check that code2pdf is installed, and how to install it (with your OK);
 - to read `code2pdf --help` for the options;
 - to choose the files, show you the list before converting, and print only parts of files
   when that's what you asked for;
+- to print what changed in a commit, branch or your working tree with `--changed`, the
+  changed lines marked;
+- to say what the PDF is in one sentence under its title (`--summary`);
 - to save the PDF outside your project and tell you what went in.
 
 ## Install

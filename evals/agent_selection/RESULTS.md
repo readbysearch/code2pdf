@@ -1,8 +1,15 @@
-# Results, 2026-10-10
+# Results, code2pdf 3.9 to 3.12 (2026-10-10 to 2026-10-11)
 
-What the agent-selection eval found on code2pdf 3.9 (commit 1b5e0c3 and later). The method is
-in [README.md](README.md). Scores are pass rates with 95% bootstrap confidence intervals over
+What the agent-selection eval found, in the order it was run. The method is in
+[README.md](README.md). Scores are pass rates with 95% bootstrap confidence intervals over
 cases; n is the number of runs.
+
+- [Scores](#scores) and [what this means](#what-this-means): choosing files, 3.8 against 3.9
+- [Topic requests](#topic-requests-the-code-that-handles-sessions): the judgement set
+- [Printing part of a file](#printing-part-of-a-file-pathstart-end): ranges and the cut-off warning (3.10, 3.11)
+- [The skill](#the-skill-do-agents-find-code2pdf-when-the-request-doesnt-name-it): requests that don't name the tool
+- [Printing what changed](#printing-what-changed---changed-rev-marks---summary-code2pdf-312): `--changed`, marks and `--summary` (3.12)
+- [Hillclimbing code2txt](#hillclimbing-code2txt), [bugs found and fixed](#bugs-found-and-fixed), [not done](#not-done-and-why)
 
 ## Scores
 
@@ -298,12 +305,17 @@ In the eval itself (each would have produced wrong scores):
 
 ## Not done, and why
 
-- **No quality hillclimb on code2pdf.** At 99–100% there is no headroom; the blog post advises
-  against climbing a saturated eval. code2txt was climbed instead (above), and it is now
-  saturated too.
+- **No quality hillclimb on file selection.** At 99–100% there is no headroom, and the blog post
+  advises against climbing a saturated eval. code2txt was climbed instead (above), and it
+  saturated too. The change cases saturated on 3.12 as well; their piece rules are tuned with
+  `pieces_eval.py` instead.
 - **No cost hillclimb.** Runs take about 3.6 turns (read help, check, convert, answer), and most
   of the cost is the agent's own fixed prompt. code2pdf's help text is about 1k tokens. Any
   saving would be inside the noise.
-- **Next useful cases** are ones where agents still fail. Two candidates: requests that need
-  judgement ("the files a new backend developer should read"), which needs an LLM judge and a
-  rubric; and agents without shell tools.
+- **Marks are checked by count, not position.** A PDF's text doesn't show the margin bars, so the
+  change grader counts marked lines from each file's heading. A run that marks the right number
+  of wrong lines would pass.
+- **`--summary` is measured, not graded.** Grading whether a summary is accurate would need an
+  LLM judge and a rubric.
+- **Agents without shell tools.** Every subject has Bash; an agent limited to file tools can't
+  run code2pdf at all, which is a different question.

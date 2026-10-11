@@ -125,10 +125,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requiremen
 - `packaging/deb/test-deb.sh DEB` installs, uses and removes the `.deb` in a fresh container.
 - **Agent eval** (`evals/agent_selection/`, see its README and RESULTS): headless agents turn
   plain-language requests into PDFs; it needs the `claude` CLI and costs money, so it is not part
-  of pytest. Before releasing a change to selection, help text or messages, run the Haiku pass
-  (~$0.30, ~15 min) and compare with RESULTS.md (99–100%):
-  `.venv/bin/python evals/agent_selection/run.py run --label pre-vX.Y --model haiku --repeats 1 --set fixtures`
-  (add `--set real` for the real repositories, `--tool code2txt` for code2txt).
+  of pytest. Before releasing a change to selection, help text or messages, run the Haiku
+  regression pass over every set but scale (~$0.35, ~20 min) and compare with RESULTS.md (100%
+  for v3.12):
+  `.venv/bin/python evals/agent_selection/run.py run --label pre-vX.Y --model haiku --repeats 1 --set fixtures,real,judgement,excerpt,changes`
+  (`--tool code2txt` for code2txt). For a new feature, also run an ablation against the last
+  release (`--ref vX.Y`): if the new cases pass without the feature, they don't test it.
 
 ## Releasing
 
@@ -138,11 +140,13 @@ Canonical repo `readbysearch/code2pdf`; Homebrew tap `readbysearch/homebrew-tap`
 
 1. Set `version` in `plugins/code2pdf/.claude-plugin/plugin.json` to the release (`X.Y.0`):
    installed skills only update when it changes, and so never describe unreleased options.
-   Push `main`, then an annotated tag `vX.Y.Z`. `.github/workflows/release-deb.yml` builds the
+   Push `main`, then an annotated tag: `vX.Y` for new features (v3.11, v3.12), `vX.Y.Z` for fixes
+   (v3.10.1). If the release workflow fails, don't move the tag: fix it and release the next
+   patch (v3.7 and v3.10 have tags but no release). `.github/workflows/release-deb.yml` builds the
    `.deb` (lintian), runs the unit and install tests on Ubuntu 24.04 and 26.04, and creates the
-   GitHub release with `code2pdf_X.Y.Z_all.deb` and `code2pdf_all.deb` (stable latest link).
+   GitHub release with `code2pdf_<version>_all.deb` (e.g. `code2pdf_3.12_all.deb`) and `code2pdf_all.deb` (stable latest link).
 2. In the tap, update `code2pdf.rb` `url` and `sha256`
-   (`curl -sL https://github.com/readbysearch/code2pdf/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256`),
+   (`curl -sL https://github.com/readbysearch/code2pdf/archive/refs/tags/<tag>.tar.gz | shasum -a 256`),
    keep `prefix.install` in sync with what the tarball contains, run
    `brew audit --strict --online readbysearch/tap/code2pdf`, push, then `brew upgrade` and `brew test`.
 3. `install.sh` installs the latest release by default, so pushing `main` alone changes only the

@@ -70,7 +70,9 @@ stored runs with the current grader, so grader fixes apply to old runs too.
 ## Subjects
 
 Headless Claude Code (`claude -p`) with Bash/Read/Glob/Grep, `--setting-sources project`
-(no user plugins or hooks), run in the project folder. The prompt is the request, plus
+(no user plugins or hooks), run in the project folder. The `--prompt plain` and `--skill`
+arms also allow the Skill tool, and `--skill` loads the plugin with `--plugin-dir` (see
+[Finding the tool](#finding-the-tool-the-skill)). The prompt is the request, plus
 where to save the PDF and that nobody can answer questions. code2pdf is a fresh copy with
 no eval files and nothing pointing back to this repository, so the answers are out of
 reach. Runs with an API error or timeout are reported as infrastructure errors and kept
@@ -126,8 +128,9 @@ The surface is the text an agent reads: `--help`, warnings, errors. These are ch
 change and revert, and a change in score traces back to them. CLI behaviour changes are
 allowed when a failure shows a real gap, and they get unit tests like any other change.
 
-- The split is frozen in `split.json` (made with seed 2026, stratified by project): 26 train
-  cases, 16 test cases. New cases are added to one side explicitly, never reshuffled.
+- The split is frozen in `split.json` (made with seed 2026, stratified by project): 37 train
+  cases, 25 test cases as of v3.12. New cases are added to one side explicitly, never
+  reshuffled; `split.json`'s note says when each was added.
   Read train transcripts only.
 - Each round makes one change aimed at a root cause, then runs train and test with 3 repeats.
   - Keep it if train goes up and test doesn't go down.
