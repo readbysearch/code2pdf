@@ -196,11 +196,11 @@ repository is also a Claude Code plugin marketplace with a `code2pdf` skill, whi
 agent when to use code2pdf and code2txt, how to install them, and the steps above:
 
 ```bash
-claude plugin marketplace add readbysearch/code2pdf
-claude plugin install code2pdf@code2pdf
+claude plugin install code2pdf --marketplace readbysearch/code2pdf
 ```
 
-(or `/plugin marketplace add readbysearch/code2pdf` inside Claude Code). Then a request such as
+(Claude Code 2.1.292 or later; with older versions, `claude plugin marketplace add
+readbysearch/code2pdf` and then `claude plugin install code2pdf@code2pdf`). Then a request such as
 "make me a PDF of the backend for tomorrow's review" uses code2pdf, even though it doesn't name
 the tool. The skill is plain Markdown
 ([`plugins/code2pdf/skills/code2pdf/SKILL.md`](plugins/code2pdf/skills/code2pdf/SKILL.md)), so
