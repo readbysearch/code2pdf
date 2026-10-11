@@ -214,6 +214,13 @@ def add_converted_folder(got, expected):
     return [best + g for g in got]
 
 
+def drop_project_folder(got, name, wanted):
+    """`code2pdf -s gin/context.go` run from the folder above the project labels the file
+    gin/context.go: the same real file, named from one level up (like the -a prefix above)."""
+    return [g[len(name) + 1:] if g.startswith(name + "/") and g[len(name) + 1:] in wanted else g
+            for g in got]
+
+
 def _ignorable(path):
     """Bytecode caches written by an agent inspecting Python code (gitignored in practice)."""
     return "__pycache__/" in path or path.endswith((".pyc", ".pyo"))
@@ -230,6 +237,10 @@ def regrade(record, case):
         r["extra"] = sorted(set(got) - set(expected) - set(case.get("allowed", [])))
         r["files_ok"] = bool(r["pdf"]) and not r["missing"] and not r["extra"] and len(got) == len(set(got))
     if case.get("set") == "excerpt":
+        expected = case["expected"](None) if callable(case["expected"]) else case["expected"]
+        r["got"] = drop_project_folder(r.get("got", []), case["project"], list(expected))
+        r["missing"] = sorted(set(expected) - set(r["got"]))
+        r["extra"] = sorted(set(r["got"]) - set(expected))
         r["files_ok"] = bool(r["pdf"]) and not r["missing"] and not r["extra"] and not r.get("excerpt_problems")
     r["pass"] = bool(r["pdf"] and r.get("files_ok") and r.get("order_ok") is not False
                      and not r["project_changed"])
@@ -286,7 +297,8 @@ def grade(case, output, before, after, tool="code2pdf", project=None):
         if case.get("match") == "basename":
             got = [os.path.basename(g) for g in got]
         else:
-            got = add_converted_folder(got, expected + list(case.get("allowed", [])))
+            wanted = expected + list(case.get("allowed", []))
+            got = add_converted_folder(drop_project_folder(got, case["project"], wanted), wanted)
         result["got"] = got
         result["missing"] = sorted(set(expected) - set(got))
         # Judgement cases accept defensible extras; anything else is wrong
