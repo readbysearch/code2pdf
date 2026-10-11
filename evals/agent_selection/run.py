@@ -37,7 +37,7 @@ sys.path.insert(0, HERE)
 
 import projects  # noqa: E402
 import real_cases  # noqa: E402
-from cases import CASES as FIXTURE_CASES  # noqa: E402
+from cases import CASES as FIXTURE_CASES, CHANGE_CASES  # noqa: E402
 
 for _case in FIXTURE_CASES:
     _case["set"] = "fixtures"
@@ -49,8 +49,10 @@ for _case in real_cases.JUDGEMENT_CASES:
     _case["set"] = "judgement"
 for _case in real_cases.EXCERPT_CASES:
     _case["set"] = "excerpt"
+for _case in CHANGE_CASES:
+    _case["set"] = "changes"
 CASES = (FIXTURE_CASES + real_cases.REAL_CASES + real_cases.SCALE_CASES + real_cases.JUDGEMENT_CASES
-         + real_cases.EXCERPT_CASES)
+         + real_cases.EXCERPT_CASES + CHANGE_CASES)
 BY_ID = {case["id"]: case for case in CASES}
 
 RESULTS = os.path.join(HERE, "results")
@@ -81,7 +83,7 @@ def applies(case, tool):
     (found in the first code2txt runs: every such run used code2txt's own defaults)."""
     if tool == "code2pdf":
         return True
-    if case.get("functions"):  # graded on printed line numbers, which code2txt doesn't print
+    if case.get("functions") or case.get("marks"):  # graded on what only the PDF shows
         return False
     return case.get("match") != "basename" and not case.get("scale") and "code2pdf" not in case["request"]
 
@@ -306,6 +308,13 @@ def content_check(case, pdf, files):
     return sorted(expected - printed), extra
 
 
+def unmarked(case, pdf):
+    """For CHANGE cases: expected files whose contents entry doesn't say lines are marked."""
+    text = re.sub(r"\s+", " ", subprocess.run(["pdftotext", pdf, "-"], capture_output=True, text=True).stdout)
+    return [rel for rel in case["expected"]
+            if not re.search(rf"{re.escape(os.path.basename(rel))} \([^)]*\b(changed|marked)\)", text)]
+
+
 def excerpt_problems(case, pdf, project):
     """For EXCERPT cases: each function's first and last line printed with its own number,
     forbidden lines absent. (All files of a case share one printed-lines set; their line
@@ -360,6 +369,9 @@ def grade(case, output, before, after, tool="code2pdf", project=None):
     if case.get("functions") and result["pdf"] and project:
         result["excerpt_problems"] = excerpt_problems(case, output, project)
         result["files_ok"] = result["files_ok"] and not result["excerpt_problems"]
+    if case.get("marks") and result["pdf"]:
+        result["unmarked"] = unmarked(case, output)
+        result["files_ok"] = result["files_ok"] and not result["unmarked"]
     result["pass"] = bool(result["pdf"] and result["files_ok"] and result["order_ok"] is not False
                           and not result["project_changed"])
     # Tool-independent: the right code is in the PDF, however it was made (no bookmarks needed)

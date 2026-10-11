@@ -117,7 +117,7 @@ def render_part(job):
     theme = themes.resolve_theme(job["theme"])
     info = dir_to_pdf.SourceInfo(job["summary"], job["labels"])
     sections, _, _, style_defs = dir_to_pdf.build_sections(job["entries"], theme, info,
-                                                           first_index=job["first_index"])
+                                                           first_index=job["first_index"], marked_as=job["marked_as"])
     css = themes.font_face_css() + style_defs + themes.page_css(theme, "", chrome=False)
     html = dir_to_pdf.wrap_document(job["title"], job["printed_moment"], css, "".join(sections))
 
@@ -153,7 +153,7 @@ def _pdf_date(moment):
 
 
 def render_in_parts(entries, output, theme, project, printed_moment, info, sources, estimates,
-                    progress, root, jobs=None):
+                    progress, root, jobs=None, summary=None, legend=None, marked_as="marked"):
     """Render ENTRIES into OUTPUT (a path in the final directory) in parts; see the module docstring."""
     import multiprocessing
     from concurrent.futures import ProcessPoolExecutor
@@ -180,7 +180,7 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
             job_list.append({
                 "part": part, "first_index": indexes[0], "entries": part_entries, "theme": theme.name,
                 "summary": info.summary, "labels": {rel: info.files.get(rel) for rel, *_ in part_entries},
-                "title": title, "printed_moment": printed_moment, "root": root,
+                "title": title, "printed_moment": printed_moment, "root": root, "marked_as": marked_as,
                 "output": os.path.join(tmp, f"part{part:04d}.pdf"),
             })
 
@@ -219,7 +219,7 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
         # Global page numbers: contents first, then the parts in order
         progress.assembling()
         sections_lines = sum(dir_to_pdf.count_lines(text) for text in dir_to_pdf.printed_sources(entries, sources))
-        groups = dir_to_pdf.group_by_folder(dir_to_pdf.contents_labels(entries))
+        groups = dir_to_pdf.group_by_folder(dir_to_pdf.contents_labels(entries, marked_as, sources))
         part_offsets, offset = [], 0
         for result in results:
             part_offsets.append(offset)
@@ -233,7 +233,7 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
                 for i, local in result["starts"].items():
                     starts[i] = contents_pages + part_offset + local + 1
             nav = dir_to_pdf.build_contents(project, len(entries), sections_lines, printed, info, groups,
-                                            page_numbers=starts)
+                                            page_numbers=starts, summary=summary, legend=legend)
             css = themes.font_face_css() + themes.page_css(theme, right, chrome=False)
             document = HTML(string=dir_to_pdf.wrap_document(title, printed_moment, css, nav)).render(
                 font_config=FontConfiguration())
@@ -292,7 +292,7 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
         for i, (rel, *_) in enumerate(entries):
             writer.add_outline_item(rel, starts[i] - 1)
         writer.add_metadata({"/Title": title, "/Creator": "code2pdf", "/CreationDate": _pdf_date(printed_moment),
-                             "/Producer": "WeasyPrint, pypdf"})
+                             "/Producer": "WeasyPrint, pypdf", **({"/Subject": summary} if summary else {})})
         writer.write(output)
         _timing("write joined PDF", mark)
         if os.environ.get("CODE2PDF_DEBUG_TIMING"):

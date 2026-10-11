@@ -11,6 +11,7 @@ MAX_FILE_SIZE="$7"
 NO_TOC="$8"
 VERBOSE="$9"
 FILES_FROM="${10:-}"   # a file listing the files to use, in order, or - for stdin
+SUMMARY="${11:-}"      # one sentence saying what this is, at the top
 
 # Track visited directories to prevent symbolic link recursion
 declare -a visited_dirs=()
@@ -245,6 +246,45 @@ resolve_ranges() {
     RESOLVED="${merged#,}"
 }
 
+# A list entry's suffix ("10-40,+12-14,-30") for a file of TOTAL lines: SHOWN (the lines to
+# print, "" for the whole file), MARKED (resolved +ranges, also shown) and REMOVED (line numbers
+# after which lines were removed). Marked lines are always shown; with no plain range the whole
+# file is. Prints the problem and returns 1 if it can't be printed.
+resolve_spec() {
+    local spec="$1" total="$2" part plain="" marks="" gone=""
+    local IFS=','
+    for part in $spec; do
+        case "$part" in
+            +*) marks="$marks,${part#+}" ;;
+            -*) if [ "${part#-}" -gt "$total" ]; then
+                    echo "$part: line ${part#-} is after the end (the file has $total lines)"; return 1
+                fi
+                gone="$gone,${part#-}" ;;
+            *) plain="$plain,$part" ;;
+        esac
+    done
+    unset IFS
+    MARKED="" SHOWN=""
+    if [ -n "$marks" ]; then
+        resolve_ranges "${marks#,}" "$total" || return 1
+        MARKED="$RESOLVED"
+    fi
+    if [ -n "$plain" ]; then
+        resolve_ranges "${plain#,}${MARKED:+,$MARKED}" "$total" || return 1
+        SHOWN="$RESOLVED"
+    fi
+    REMOVED="$(printf '%s\n' ${gone//,/ } | sort -n -u | paste -sd, -)"
+}
+
+# The heading note for an entry: "lines 12-13, 19; marked 12-13; lines removed after 30"
+spec_label() {
+    local shown="$1" marked="$2" removed="$3" out=""
+    [ -n "$shown" ] && out="$(ranges_label "$shown")"
+    [ -n "$marked" ] && out="${out:+$out; }marked $(ranges_label "$marked" | sed 's/^lines* //')"
+    [ -n "$removed" ] && out="${out:+$out; }lines removed after ${removed//,/, }"
+    echo "$out"
+}
+
 # "12-13,19-19" -> "lines 12-13, 19" (or "line 7")
 ranges_label() {
     local spec="$1" part out="" count=0 single=""
@@ -304,6 +344,8 @@ read_file_list() {
     target_real="$(cd "$TARGET_DIR" && pwd -P)"
     sorted_files=()
     file_ranges=()
+    file_marked=()
+    file_removed=()
     cut_warnings=()
     local spec base note
     if [ "$source" = "-" ]; then
@@ -322,9 +364,10 @@ read_file_list() {
             *) path="$TARGET_DIR/$line"
                if [ ! -e "$path" ] && [ -e "$line" ]; then path="$PWD/$line"; fi ;;
         esac
-        spec=""
-        # FILE:START-END[,START-END] prints part of a file (a name that is a file stays whole)
-        if [ ! -f "$path" ] && [[ "$line" =~ ^(.+):([0-9]+(-[0-9]*)?(,[0-9]+(-[0-9]*)?)*)$ ]]; then
+        spec="" MARKED="" REMOVED=""
+        # FILE:START-END[,START-END] prints part of a file, +START-END marks lines, -N says lines
+        # were removed after line N (a name that is a file stays whole)
+        if [ ! -f "$path" ] && [[ "$line" =~ ^(.+):((\+?[0-9]+(-[0-9]*)?|-[0-9]+)(,(\+?[0-9]+(-[0-9]*)?|-[0-9]+))*)$ ]]; then
             base="${BASH_REMATCH[1]}"
             spec="${BASH_REMATCH[2]}"
             case "$base" in
@@ -333,12 +376,12 @@ read_file_list() {
                    if [ ! -e "$path" ] && [ -e "$base" ]; then path="$PWD/$base"; fi ;;
             esac
             if [ -f "$path" ]; then
-                if ! note=$(resolve_ranges "$spec" "$(awk 'END { print NR }' "$path")"); then
+                if ! note=$(resolve_spec "$spec" "$(awk 'END { print NR }' "$path")"); then
                     problems+=("$line: $note")
                     continue
                 fi
-                resolve_ranges "$spec" "$(awk 'END { print NR }' "$path")"
-                spec="$RESOLVED"
+                resolve_spec "$spec" "$(awk 'END { print NR }' "$path")"
+                spec="$SHOWN"
             fi
         fi
         if [ ! -f "$path" ]; then
@@ -350,8 +393,8 @@ read_file_list() {
             "$target_real"/*) rel="${real#"$target_real"/}" ;;
             *) problems+=("outside $TARGET_DIR: $line"); continue ;;
         esac
-        case "$seen" in *$'\n'"$rel:$spec"$'\n'*) continue ;; esac
-        seen="$seen$rel:$spec"$'\n'
+        case "$seen" in *$'\n'"$rel:$spec|$MARKED|$REMOVED"$'\n'*) continue ;; esac
+        seen="$seen$rel:$spec|$MARKED|$REMOVED"$'\n'
         [ "$real" = "$OUTPUT_REAL" ] && continue
         if is_binary "$path"; then
             binaries+=("$rel")
@@ -359,7 +402,9 @@ read_file_list() {
         fi
         sorted_files+=("$rel")
         file_ranges+=("$spec")
-        if [ -n "$spec" ]; then
+        file_marked+=("$MARKED")
+        file_removed+=("$REMOVED")
+        if [ -n "$spec" ] && [ -z "$MARKED$REMOVED" ]; then  # marked pieces are cut on purpose
             local cut_start cut_end cut_last
             while read -r cut_start cut_end cut_last; do
                 [ -z "$cut_start" ] && continue
@@ -385,18 +430,42 @@ read_file_list() {
 
 # Function to write file content with markdown formatting
 write_file_content() {
-    local file="$1" spec="${2:-}"
+    local file="$1" spec="${2:-}" marked="${3:-}" removed="${4:-}"
     local full_path="$TARGET_DIR/$file"
     local language=$(get_language_from_extension "$full_path")
+    local label
+    label="$(spec_label "$spec" "$marked" "$removed")"
     
     echo "" >> "$OUTPUT_FILE"
-    if [ -n "$spec" ]; then
-        echo "## $file ($(ranges_label "$spec"))" >> "$OUTPUT_FILE"
+    if [ -n "$label" ]; then
+        echo "## $file ($label)" >> "$OUTPUT_FILE"
     else
         echo "## $file" >> "$OUTPUT_FILE"
     fi
     echo '```'"$language" >> "$OUTPUT_FILE"
-    if [ -n "$spec" ]; then
+    if [ -n "$removed" ]; then
+        # Lines removed after line N get a marker line; gaps between ranges as below
+        awk -v shown="$spec" -v removed="$removed" '
+            BEGIN {
+                n = split(shown, parts, ",")
+                for (i = 1; i <= n; i++) { split(parts[i], se, "-"); s[i] = se[1] + 0; e[i] = se[2] + 0 }
+                m = split(removed, rm, ",")
+                for (i = 1; i <= m; i++) gone[rm[i] + 0] = 1
+                if (gone[0] && (n == 0 || s[1] == 1)) print "... (lines removed here)"
+            }
+            {
+                k = 0
+                if (n == 0) k = 1
+                else for (i = 1; i <= n; i++) if (NR >= s[i] && NR <= e[i]) { k = i; break }
+                if (!k) next
+                if (n > 0 && k > 1 && NR == s[k]) {
+                    if (e[k - 1] + 1 == s[k] - 1) print "... (line " e[k - 1] + 1 " not shown)"
+                    else print "... (lines " e[k - 1] + 1 "-" s[k] - 1 " not shown)"
+                }
+                print
+                if (gone[NR]) print "... (lines removed here)"
+            }' "$full_path" >> "$OUTPUT_FILE"
+    elif [ -n "$spec" ]; then
         # Only these lines; a marker between ranges says what is left out
         local part start end previous=0
         local IFS=','
@@ -442,14 +511,20 @@ main() {
         unset IFS
     fi
     
+    if [ -n "$SUMMARY" ]; then
+        printf '# Summary\n\n%s\n\n' "$SUMMARY" >> "$OUTPUT_FILE"
+    fi
+
     # Generate table of contents if requested
     if [ "$NO_TOC" != true ] && [ ${#sorted_files[@]} -gt 0 ]; then
         echo "# Table of Contents" >> "$OUTPUT_FILE"
         echo "" >> "$OUTPUT_FILE"
         local i
+        local label
         for ((i = 0; i < ${#sorted_files[@]}; i++)); do
-            if [ -n "${file_ranges[$i]:-}" ]; then
-                echo "- ${sorted_files[$i]} ($(ranges_label "${file_ranges[$i]}"))" >> "$OUTPUT_FILE"
+            label="$(spec_label "${file_ranges[$i]:-}" "${file_marked[$i]:-}" "${file_removed[$i]:-}")"
+            if [ -n "$label" ]; then
+                echo "- ${sorted_files[$i]} ($label)" >> "$OUTPUT_FILE"
             else
                 echo "- ${sorted_files[$i]}" >> "$OUTPUT_FILE"
             fi
@@ -461,7 +536,7 @@ main() {
     # Write all file contents
     local k
     for ((k = 0; k < ${#sorted_files[@]}; k++)); do
-        write_file_content "${sorted_files[$k]}" "${file_ranges[$k]:-}"
+        write_file_content "${sorted_files[$k]}" "${file_ranges[$k]:-}" "${file_marked[$k]:-}" "${file_removed[$k]:-}"
     done
     
     # Report results

@@ -1,5 +1,5 @@
 {
- "note": "Frozen 2026-10-10 before any hillclimbing; new cases go to train or test explicitly. Added 2026-10-10: scale-alamofire (train), scale-gymnasium (test). Added 2026-10-10: judgement cases (3 train, 2 test). Added 2026-10-10: excerpt cases (3 train, 2 test).",
+ "note": "Frozen 2026-10-10 before any hillclimbing; new cases go to train or test explicitly. Added 2026-10-10: scale-alamofire (train), scale-gymnasium (test). Added 2026-10-10: judgement cases (3 train, 2 test). Added 2026-10-10: excerpt cases (3 train, 2 test). Added 2026-10-11: change cases (shop-review-last-commit train, relay-review-uncommitted test).",
  "test": [
   "alamo-test-plans",
   "express-lib-router",
@@ -21,7 +21,8 @@
   "gin-json-render",
   "alamo-retry",
   "alamo-retry-decision",
-  "gym-cartpole-step-reset"
+  "gym-cartpole-step-reset",
+  "relay-review-uncommitted"
  ],
  "train": [
   "alamo-all-swift",
@@ -56,6 +57,7 @@
   "gin-middleware",
   "gin-context-json-methods",
   "flask-open-save-session",
-  "express-dispatch"
+  "express-dispatch",
+  "shop-review-last-commit"
  ]
 }

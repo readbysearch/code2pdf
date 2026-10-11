@@ -287,3 +287,37 @@ CASES = [
 ]
 
 BY_ID = {case["id"]: case for case in CASES}
+
+
+# Reviewing a change on paper with the changed lines marked (code2pdf 3.12's --changed, or a
+# list with +START-END marks). Graded on the bookmarks and on each file's contents entry saying
+# that lines are marked ("2 lines changed", "all 3 lines changed", "4 lines marked").
+CHANGE_CASES = [
+    dict(id="shop-review-last-commit", project="shop", marks=True,
+         setup={"commit": {"backend/payments.py": '"""Stripe payments."""\n\n\ndef main():\n    charge(order_total(cart))\n'
+                                                  '\n\ndef refund(order, days):\n    if days > 30:\n        raise ValueError("too late")\n'
+                                                  '    return charge(-order.total)\n',
+                           "backend/refunds.py": '"""Refund rules."""\n\nMAX_DAYS = 30\n',
+                           "docs/api.md": None,
+                           "frontend/public/refund.png": b"\x89PNG\r\n\x1a\n\x00\x00"},
+                "message": "Add refunds"},
+         request="Print the last commit for a review on paper: the files it changed, with the changed "
+                 "lines marked so I can see what is new. Skip images; deleted files can't be printed.",
+         expected=["backend/payments.py", "backend/refunds.py"],
+         why_hard="Needs the change itself, not just the file names; the commit also deletes a file and "
+                  "adds an image.",
+         source="hand-written (review a commit on paper)",
+         reference="code2pdf --changed HEAD~1 -o {out}"),
+    dict(id="relay-review-uncommitted", project="relay", marks=True,
+         setup={"edit": {"internal/queue/queue.go": "package queue\n\ntype Queue struct{}\n\n"
+                                                     "// Len reports how many items wait.\nfunc (q *Queue) Len() int {\n"
+                                                     "\treturn 0\n}\n",
+                         "internal/server/server.go": None}},
+         request="I haven't committed yet. Print my changes for review, with the changed lines marked. "
+                 "A deleted file can't be printed.",
+         expected=["internal/queue/queue.go"],
+         why_hard="The changes are uncommitted; one file was deleted.",
+         source="hand-written (review before committing)",
+         reference="code2pdf --changed HEAD -o {out}"),
+]
+

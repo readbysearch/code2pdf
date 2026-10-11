@@ -175,6 +175,58 @@ use app.py:1260-1286`. code2pdf reads only indentation for this, so it works in 
 lines after the range that are indented deeper than its first line, and a closing `}` at that
 line's own indent, count as the same block. code2pdf repeats the warning after `Done:`.
 
+A file printed in more than four pieces is summed up in its heading, as in "Python, 13 parts,
+280 of 778 lines".
+
+#### Printing what changed, with the changed lines marked
+
+```bash
+code2pdf --changed HEAD~1 -o change.pdf      # the last commit, and any uncommitted edits
+code2pdf --changed main -o review.pdf        # everything since main
+code2pdf --changed HEAD -o wip.pdf           # only what isn't committed yet
+```
+
+`--changed REV` compares REV (a commit, tag or branch) with the files as they are now, and
+prints each change in its file:
+
+- **Pieces:** each change comes with its enclosing block, such as the whole function or `if`,
+  while that block has at most 40 lines. Doc comments and decorators directly above it come
+  too. In a bigger block, a change gets up to 3 lines of context on each side, stopping at a
+  blank line.
+- **Merging:** pieces within 3 lines of each other join up. A file whose pieces cover most of
+  it, like a new file, is printed whole.
+- **Marks:** changed lines get a bar in the margin and a light tint. Where lines were deleted,
+  a small "lines removed" marker stands in their place.
+- **The contents page** says how many lines changed in each file.
+- **Left out, with a note:** deleted files, files renamed without edits, untracked files and
+  binary files. `--exclude` still applies.
+
+It's built from two parts you can also use on their own:
+
+- **Marks in a list.** In a `--files-from` list (or after `-s`), `+START-END` marks lines and
+  `-N` says lines were removed after line N. For example, `app.py:10-40,+12-14,-30` prints lines
+  10–40, marks 12–14, and shows a "lines removed" marker after line 30. Marked lines are always
+  printed. With only marks and no plain range, the whole file is printed.
+- **`--changed REV --list-files`** prints the list `--changed` would use, in that same form.
+  Edit it (drop a file, widen a piece), then pass it back with `--files-from`, or give it to
+  code2txt:
+  ```bash
+  code2pdf --changed HEAD~1 --list-files > change.txt      # edit change.txt, then:
+  code2pdf --files-from change.txt -o change.pdf
+  code2pdf --changed HEAD~1 --list-files | code2txt --files-from - -o change.md
+  ```
+
+#### Saying what a printout is: `--summary`
+
+```bash
+code2pdf --changed v3.11 --summary "The Claude Code skill: the plugin, its test and the eval arm" -o skill.pdf
+```
+
+`--summary TEXT` puts one sentence under the title on the contents page (or under the file name
+with `-s`). It's also stored as the PDF's Subject, which file search and PDF readers show. Use it
+to say what was asked for and what was left out, so the printout still makes sense later.
+code2txt takes `--summary` too and puts it at the top of the text file.
+
 #### Using code2pdf from a coding agent
 
 You can ask a coding agent (Claude Code, Codex, …) for a PDF in plain words, e.g. "print the
@@ -307,7 +359,8 @@ code2txt --help
 | `--no-toc` | Skip table of contents generation | false |
 | `--verbose` | Show processing details | false |
 | `--ignore-files` | Specific file names to skip (comma-separated) | - |
-| `--files-from FILE` | Use exactly the files listed in `FILE` (`-` for stdin), in that order; the filters don't apply, binary files are skipped; `path:START-END` for part of a file | - |
+| `--files-from FILE` | Use exactly the files listed in `FILE` (`-` for stdin), in that order; the filters don't apply, binary files are skipped; `path:START-END` for part of a file; `+START-END` and `-N` marks, listed in the heading | - |
+| `--summary TEXT` | One sentence at the top saying what this is | - |
 | `-V, --version` | Show the version and how it is installed | - |
 
 ## Fonts
