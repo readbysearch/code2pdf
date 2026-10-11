@@ -148,25 +148,92 @@ grader left every earlier score as it was.
 
 ## Printing what changed (`--changed REV`, marks, `--summary`), code2pdf 3.12
 
-Two cases in a new "changes" set: review the last commit on paper, and review uncommitted work,
-each "with the changed lines marked". The grader checks the bookmarks, and that every file's
-contents entry says lines are marked ("2 lines changed", "all 3 lines changed").
+### Cases and grader
 
-| | runs | pass | how they did it |
-|---|---|---|---|
-| Sonnet, prompt names code2pdf | 6 | 100% | `--changed` 4×; twice a list with `+START-END` marks |
-| Haiku with the skill, prompt doesn't name the tool | 6 | 100% | `--changed` 6× |
-| Haiku regression pass, all sets but scale (54 cases) | 54 | **100%** | (96% before) |
+The "changes" set has 8 cases. Two are small fixtures (review the last commit, review
+uncommitted work). Six use real repositories at pinned tags:
 
-- **Both layers got used.** For "the last commit", Sonnet twice built the list itself, because
-  `--changed HEAD~1` also includes uncommitted edits. The marks syntax covered a case the
-  shortcut doesn't.
-- **Every run passed `--summary` without being asked**, for example "Last commit 893c8e8 (Add
-  refunds): changed files, with the changed lines marked". Agents picked it up from `--help` and
-  the skill.
-- **Compatibility.** Rendered without marks, a frozen copy of the repository gives the same 146
-  page images as 3.11 (single pass and parts mode). The only intended change is that a file in
-  more than four pieces is summed up as "5 parts, 55 of 286 lines".
+- Flask 3.0.3 release: the Python code; only `app.py` and `blueprints.py`; the release while
+  an uncommitted edit sits in the working tree.
+- Express 4.21.0 release: one changed line in a 1,179-line file.
+- Express 4.20.0 release (added later and held out).
+- gin: uncommitted work, without the tests.
+
+The grader works from the true `git diff`. For each expected file:
+1. the bookmark names it;
+2. every changed line is printed with its own line number;
+3. the marked-line count lies between the non-blank changed lines and the changed lines plus
+   max(2, 25%);
+4. a file over 150 lines with a small change isn't printed whole.
+
+`check` proves that every reference solution passes and that the naive `-a .` fails. It also
+proves that two decoys fail: the right files whole without marks, and every line marked.
+
+### Results
+
+| | n | pass |
+|---|---|---|
+| code2pdf **3.11** (ablation), Sonnet | 14 | **0%** |
+| Haiku, tool not named in the prompt, **no skill** | 14 | **0%** (reportlab scripts, 49 s median) |
+| Haiku | 21 → 24 | 100% → 100% |
+| Sonnet | 21 → 24 | 100% → 100% |
+| Opus (high effort) | 7 | 100% |
+| Haiku, tool not named, with the skill | 21 → 24 | 95% → 100% |
+| Haiku regression pass, all other sets (52 cases) | 52 | 100% (96% before) |
+
+The arrows go from round 1 to round 2. With 3.11, agents printed `git diff -U9999` output as if
+it were a source file, or copied files to staging folders: wrong paths, no marks. 34 of 72
+round-2 runs piped `--changed --list-files` through `grep` into `--files-from`. Both layers get
+used together.
+
+### Round 1: what changed and why
+
+- **A mark alone now prints only its lines.** The one round-1 failure was Haiku (with the
+  skill) writing `src/flask/app.py:+244-253` and getting whole files, under the first rule
+  ("with only marks, the whole file is printed"). Sonnet had written the same kind of list in
+  a training case, where it passed only because the file was small. The rule is now "every
+  range is printed, and a `+` range is also marked", like `app.py:244-253`. The whole file with
+  marks is `app.py:1-,+244-253`.
+
+  The failing run was a test case, which the method says not to read. The same pattern in a
+  training case is the basis for the change, and a new held-out case was added after it.
+  Round 2 has no marks-only list, so the score doesn't show whether the fix helped; the reason
+  for it is consistency.
+- **Header lines.** `pieces_eval.py` measures the piece rules on real release diffs, with no
+  agents. For each changed line, it checks whether the line that opens its block (`near`) and
+  its top-level `def`/`func`/`class` (`outer`) are printed. Train: Flask 3.0.2 → 3.0.3, gin
+  v1.9.1 → v1.10.0. Test: Express 4.19.2 → 4.20.0, Alamofire 5.8.1 → 5.9.0.
+
+  | rule | train near / outer | test near / outer | lines per changed line (train, test) |
+  |---|---|---|---|
+  | block ≤ 40, 3 lines of context | 96.3% / 89.0% | 98.3% / 93.8% | 2.3, 1.5 |
+  | the same, plus header lines | **100% / 100%** | **100% / 100%** | 2.4, 1.5 |
+
+  Block limits of 20, 60 and 80, and 1 or 5 lines of context, only traded context for length.
+  Header lines got full context for about 1 page in 35. Express gained most: its code sits in
+  large top-level blocks, and only 49% of its changed lines showed their function before.
+
+  Two notes on this measure. First, 100% is guaranteed by construction once header lines are
+  printed; what it shows is that the cost is small. Second, looking at a page found a flaw in
+  it: the "header" of a change in Flask's `__init__` was `):`, the end of a multi-line
+  signature, and it still counted as context. The header finder now climbs to the line that
+  opened the statement, and the numbers above are with that fix.
+
+  The first test diffs (Express 4.21.0, Alamofire 5.9.1) had only 5 changed source lines
+  between them, so they were replaced before any tuning on them.
+
+### `--summary`
+
+No request asked for it, and all 70 round-1 runs on the current code passed one. 70 named the
+revision or scope ("Flask 3.0.3 release commit (86bf4d5, diffed against 3.0.2 / 6ab73fe)"), and
+60 said what was left out ("Excludes the uncommitted edit to src/flask/helpers.py"). This is
+measured, not graded.
+
+### What this eval doesn't cover
+
+The change cases saturated again on the current code (100% for every model), so the agent
+eval can't rank the piece rules; `pieces_eval.py` does that. The marks are checked by count,
+not by position (a PDF's text doesn't show the bars).
 
 ## Hillclimbing code2txt
 

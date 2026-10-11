@@ -22,6 +22,11 @@ REPOS = {
     "express": ("expressjs/express", "4.21.0"),
     "flask": ("pallets/flask", "3.0.3"),
     "flask-3.0.2": ("pallets/flask", "3.0.2"),
+    "express-4.20.0": ("expressjs/express", "4.20.0"),
+    "gin-v1.9.1": ("gin-gonic/gin", "v1.9.1"),
+    "alamofire-5.9.0": ("Alamofire/Alamofire", "5.9.0"),
+    "express-4.19.2": ("expressjs/express", "4.19.2"),
+    "alamofire-5.8.1": ("Alamofire/Alamofire", "5.8.1"),
 }
 
 
@@ -52,7 +57,8 @@ def _git(root, *args):
 
 def build(name, root, setup=None):
     """Copy the pinned tree to ROOT as a git repository. setup={"previous": key} commits that
-    release first, so the last commit is the release diff."""
+    release first, so the last commit is the release diff. "edit": {path: [(old, new), ...] or
+    new content} changes files afterwards without committing; "stage": [paths] git-adds some."""
     first = (setup or {}).get("previous")
     shutil.copytree(fetch(first or name), root, symlinks=True)
     _git(root, "init", "-q")
@@ -66,6 +72,19 @@ def build(name, root, setup=None):
         shutil.copytree(fetch(name), root, symlinks=True, dirs_exist_ok=True)
         _git(root, "add", "-A")
         _git(root, "commit", "-q", "-m", REPOS[name][1])
+    for rel, change in (setup or {}).get("edit", {}).items():
+        path = os.path.join(root, rel)
+        if isinstance(change, str):
+            text = change
+        else:
+            text = open(path, encoding="utf-8").read()
+            for old, new in change:
+                assert text.count(old) == 1, (rel, old)
+                text = text.replace(old, new)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+    for rel in (setup or {}).get("stage", []):
+        _git(root, "add", rel)
 
 
 # --- rules for expected files --------------------------------------------------------------
@@ -409,3 +428,93 @@ REAL_CASES = [
          source="hand-written",
          reference="find src/flask tests -name '*.py' | code2pdf --files-from - -o {out}"),
 ]
+
+
+# Reviewing a change on paper (code2pdf 3.12's --changed and +START-END marks). Graded from the
+# true diff (run.change_problems): every changed line printed with its own number, each file's
+# marked-line count close to the true one, and big files with small changes not printed whole.
+def _changed(r, base, head, keep):
+    names = git_lines(r, "diff", "--name-only", "--diff-filter=d", base, *([head] if head else []))
+    return [f for f in names if keep(f) and is_text(r, f)]
+
+
+GIN_EDITS = {
+    "context.go": [
+        ('\t// Legacy "AppEngine" flag\n', '\t// Legacy "AppEngine" flag (deprecated: use TrustedPlatform)\n'),
+        ("func (c *Context) Redirect(code int, location string) {\n",
+         "func (c *Context) Redirect(code int, location string) {\n\tif !isRedirect(code) {\n"
+         "\t\tpanic(fmt.Sprintf(\"cannot redirect with status code %d\", code))\n\t}\n"),
+    ],
+    "context_test.go": [('\tc.JSON(http.StatusCreated, H{"foo": "bar", "html": "<b>"})\n',
+                         '\tc.JSON(http.StatusCreated, H{"foo": "bar", "html": "<b>", "n": 1})\n')],
+    "redirect.go": "package gin\n\n// isRedirect reports whether code is a redirect status (3xx).\n"
+                   "func isRedirect(code int) bool {\n\treturn code >= 300 && code <= 308\n}\n",
+}
+
+CHANGE_CASES = [
+    dict(id="flask-review-release-code", project="flask", marks=True, diff=("HEAD~1", "HEAD"),
+         setup={"previous": "flask-3.0.2"},
+         request="Review the 3.0.3 release (the last commit) on paper: the changes to the Python code "
+                 "under src/ and tests/, just the changed parts with the changed lines marked, not "
+                 "whole files.",
+         expected=lambda r: _changed(r, "HEAD~1", "HEAD",
+                                     lambda f: f.endswith(".py") and f.startswith(("src/", "tests/"))),
+         why_hard="Ten files out of 42 changed; small changes inside files of up to 1,500 lines; "
+                  "the release also renames and deletes files.",
+         source="hand-written (review a release on paper)",
+         reference="code2pdf --changed HEAD~1 --list-files | grep -E '^(src|tests)/.*\\.py:' | "
+                   "code2pdf --files-from - -o {out}"),
+    dict(id="flask-review-two-files", project="flask", marks=True, diff=("HEAD~1", "HEAD"),
+         setup={"previous": "flask-3.0.2"},
+         request="From the 3.0.3 release (the last commit), print only the changes to src/flask/app.py "
+                 "and src/flask/blueprints.py, with the changed lines marked.",
+         expected=["src/flask/app.py", "src/flask/blueprints.py"],
+         why_hard="Two files of a 42-file change, one of them 1,500 lines long; src/flask/sansio/app.py "
+                  "also changed.",
+         source="hand-written (review part of a release)",
+         reference="code2pdf --changed HEAD~1 --list-files | grep -E '^src/flask/(app|blueprints)\\.py:' | "
+                   "code2pdf --files-from - -o {out}"),
+    dict(id="flask-review-release-not-wip", project="flask", marks=True, diff=("HEAD~1", "HEAD"),
+         setup={"previous": "flask-3.0.2",
+                "edit": {"src/flask/helpers.py": [("def get_debug_flag() -> bool:\n",
+                                                   "def get_debug_flag() -> bool:  # TODO: cache\n")]}},
+         request="Review the 3.0.3 release (the last commit): the changes to the Python files in "
+                 "src/flask, with the changed lines marked. I also have an uncommitted edit in my "
+                 "working tree; leave that out.",
+         expected=lambda r: _changed(r, "HEAD~1", "HEAD",
+                                     lambda f: f.endswith(".py") and f.startswith("src/flask/")),
+         why_hard="Comparing HEAD~1 with the working tree also picks up the uncommitted edit, in a "
+                  "file the release didn't touch.",
+         source="hand-written (review a commit while work is in progress)",
+         reference="code2pdf --changed HEAD~1 --list-files | grep -E '^src/flask/.*\\.py:' | "
+                   "grep -v '^src/flask/helpers.py:' | code2pdf --files-from - -o {out}"),
+    dict(id="express-review-release", project="express", marks=True, diff=("HEAD~1", "HEAD"),
+         setup={"previous": "express-4.20.0"},
+         request="Review the 4.21.0 release (the last commit) on paper: only the code in lib/, just the "
+                 "changed part with the changed lines marked.",
+         expected=["lib/response.js"],
+         why_hard="One changed line in a 1,179-line file; the release also changes History.md and "
+                  "package.json.",
+         source="hand-written (review a release on paper)",
+         reference="code2pdf --changed HEAD~1 --exclude History.md --exclude package.json -o {out}"),
+    # Added after the round that changed the mark rule and added header lines, held out
+    dict(id="express-review-4-20", project="express-4.20.0", marks=True, diff=("HEAD~1", "HEAD"),
+         setup={"previous": "express-4.19.2"},
+         request="Review the 4.20.0 release (the last commit) on paper: the changes to the code in lib/, "
+                 "just the changed parts with the changed lines marked.",
+         expected=lambda r: _changed(r, "HEAD~1", "HEAD", lambda f: f.startswith("lib/") and f.endswith(".js")),
+         why_hard="About a hundred changed lines across lib/, inside large top-level blocks; the release "
+                  "also changes tests, docs and package.json.",
+         source="hand-written (review a release on paper)",
+         reference="code2pdf --changed HEAD~1 --list-files | grep '^lib/' | code2pdf --files-from - -o {out}"),
+    dict(id="gin-review-uncommitted", project="gin", marks=True, diff=("HEAD", None),
+         setup={"edit": GIN_EDITS, "stage": ["redirect.go", "context_test.go"]},
+         request="I have uncommitted changes, some staged and some not. Print them for review on "
+                 "paper, without the tests: just the changed parts, with the changed lines marked.",
+         expected=["context.go", "redirect.go"],
+         why_hard="Changes in two places of a 1,267-line file; a new staged file; a changed test to "
+                  "leave out.",
+         source="hand-written (review before committing)",
+         reference="code2pdf --changed HEAD --exclude '*_test.go' -o {out}"),
+]
+

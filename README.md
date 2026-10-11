@@ -192,7 +192,8 @@ prints each change in its file:
 - **Pieces:** each change comes with its enclosing block, such as the whole function or `if`,
   while that block has at most 40 lines. Doc comments and decorators directly above it come
   too. In a bigger block, a change gets up to 3 lines of context on each side, stopping at a
-  blank line.
+  blank line, plus the line that opens each block it's in (its `def`, `func` or `class` line),
+  as `git diff` names the function in a hunk header.
 - **Merging:** pieces within 3 lines of each other join up. A file whose pieces cover most of
   it, like a new file, is printed whole.
 - **Marks:** changed lines get a bar in the margin and a light tint. Where lines were deleted,
@@ -205,8 +206,9 @@ It's built from two parts you can also use on their own:
 
 - **Marks in a list.** In a `--files-from` list (or after `-s`), `+START-END` marks lines and
   `-N` says lines were removed after line N. For example, `app.py:10-40,+12-14,-30` prints lines
-  10–40, marks 12–14, and shows a "lines removed" marker after line 30. Marked lines are always
-  printed. With only marks and no plain range, the whole file is printed.
+  10–40, marks 12–14, and shows a "lines removed" marker after line 30. Every range is printed,
+  and a `+` range is also marked: `app.py:+12-14` prints and marks only lines 12–14, and
+  `app.py:1-,+12-14` prints the whole file with them marked.
 - **`--changed REV --list-files`** prints the list `--changed` would use, in that same form.
   Edit it (drop a file, widen a piece), then pass it back with `--files-from`, or give it to
   code2txt:

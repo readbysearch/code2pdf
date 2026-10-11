@@ -248,8 +248,9 @@ resolve_ranges() {
 
 # A list entry's suffix ("10-40,+12-14,-30") for a file of TOTAL lines: SHOWN (the lines to
 # print, "" for the whole file), MARKED (resolved +ranges, also shown) and REMOVED (line numbers
-# after which lines were removed). Marked lines are always shown; with no plain range the whole
-# file is. Prints the problem and returns 1 if it can't be printed.
+# after which lines were removed). Every range is printed and +ranges are also marked; with no
+# range at all, or ranges covering it all, the whole file is. Prints the problem and returns 1
+# if it can't be printed.
 resolve_spec() {
     local spec="$1" total="$2" part plain="" marks="" gone=""
     local IFS=','
@@ -269,9 +270,11 @@ resolve_spec() {
         resolve_ranges "${marks#,}" "$total" || return 1
         MARKED="$RESOLVED"
     fi
-    if [ -n "$plain" ]; then
-        resolve_ranges "${plain#,}${MARKED:+,$MARKED}" "$total" || return 1
+    if [ -n "$plain$MARKED" ]; then
+        plain="${plain#,}"
+        resolve_ranges "${plain}${plain:+${MARKED:+,}}$MARKED" "$total" || return 1
         SHOWN="$RESOLVED"
+        [ -n "$MARKED$gone" ] && [ "$SHOWN" = "1-$total" ] && SHOWN=""  # all of it, with marks
     fi
     REMOVED="$(printf '%s\n' ${gone//,/ } | sort -n -u | paste -sd, -)"
 }
