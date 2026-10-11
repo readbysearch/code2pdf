@@ -70,6 +70,10 @@ def main(argv):
     if not os.path.isfile(input_file):
         print(f"Error: Input file '{input_file}' not found.", file=sys.stderr)
         return 1
+    if os.path.isabs(relative_path):  # label a file inside the current folder by its path there
+        inside = os.path.relpath(os.path.realpath(input_file), os.path.realpath(os.getcwd()))
+        if inside != ".." and not inside.startswith(".." + os.sep):
+            relative_path = inside
     os.makedirs(os.path.dirname(os.path.abspath(output_pdf)), exist_ok=True)
 
     try:

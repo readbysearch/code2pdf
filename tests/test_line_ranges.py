@@ -213,6 +213,18 @@ def test_single_file_mode_takes_a_range(project, temp_dir):
     assert "lines 5–6 of 20" in text
 
 
+@needs_render
+@needs_pdftotext
+@pytest.mark.parametrize("arg", ["{root}/sub/c.js", "{root}/sub/c.js:2-3"])
+def test_single_file_given_by_absolute_path_is_labelled_by_its_path_here(project, temp_dir, arg):
+    out = temp_dir / "one.pdf"
+    result = code2pdf(["-s", arg.format(root=project), "-o", str(out)], project)
+    assert result.returncode == 0, result.stdout + result.stderr
+    import pypdf
+    assert [item.title for item in pypdf.PdfReader(out).outline] == ["sub/c.js"]
+    assert str(project) not in pdf_text(out)  # not /private/var/.../proj/sub/c.js in the header
+
+
 # --- code2txt --------------------------------------------------------------------------------
 
 def test_code2txt_prints_the_ranges(project, temp_dir):
