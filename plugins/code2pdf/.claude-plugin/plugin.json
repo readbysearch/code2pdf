@@ -1,6 +1,6 @@
 {
   "name": "code2pdf",
-  "version": "3.11.0",
+  "version": "3.12.0",
   "description": "Print source code as a PDF (contents page, highlighting, real line numbers), or bundle it into one text file for an LLM, with the code2pdf and code2txt tools.",
   "author": {
     "name": "readbysearch"
