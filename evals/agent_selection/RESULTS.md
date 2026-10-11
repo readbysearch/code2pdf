@@ -146,6 +146,28 @@ The content check is new for this comparison. It accepts every reference solutio
 the naive `-a .` in 26 of 27 fixtures (see README). Re-grading the stored runs with the changed
 grader left every earlier score as it was.
 
+## Printing what changed (`--changed REV`, marks, `--summary`), code2pdf 3.12
+
+Two cases in a new "changes" set: review the last commit on paper, and review uncommitted work,
+each "with the changed lines marked". The grader checks the bookmarks, and that every file's
+contents entry says lines are marked ("2 lines changed", "all 3 lines changed").
+
+| | runs | pass | how they did it |
+|---|---|---|---|
+| Sonnet, prompt names code2pdf | 6 | 100% | `--changed` 4×; twice a list with `+START-END` marks |
+| Haiku with the skill, prompt doesn't name the tool | 6 | 100% | `--changed` 6× |
+| Haiku regression pass, all sets but scale (54 cases) | 54 | **100%** | (96% before) |
+
+- **Both layers got used.** For "the last commit", Sonnet twice built the list itself, because
+  `--changed HEAD~1` also includes uncommitted edits. The marks syntax covered a case the
+  shortcut doesn't.
+- **Every run passed `--summary` without being asked**, for example "Last commit 893c8e8 (Add
+  refunds): changed files, with the changed lines marked". Agents picked it up from `--help` and
+  the skill.
+- **Compatibility.** Rendered without marks, a frozen copy of the repository gives the same 146
+  page images as 3.11 (single pass and parts mode). The only intended change is that a file in
+  more than four pieces is summed up as "5 parts, 55 of 286 lines".
+
 ## Hillclimbing code2txt
 
 code2txt was the part of the solution without the 3.9 options, so it had room to climb. It was
