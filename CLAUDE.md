@@ -10,6 +10,10 @@ and lessons that were expensive to learn.
 - `code2pdf`: source code → PDF (contents page, syntax highlighting, line numbers, git dates,
   bundled IBM Plex fonts, CJK). Pipeline: Pygments → one HTML document → WeasyPrint → PDF.
 - `code2txt`: a directory → one Markdown text file for LLM context (pure bash, no Python).
+- `plugins/code2pdf/`: a Claude Code plugin with one skill (`skills/code2pdf/SKILL.md`) that tells
+  agents when to use the tools; `.claude-plugin/marketplace.json` makes the repo its marketplace.
+  The skill names few options and defers to `--help`; `tests/test_plugin.py` checks the ones it
+  names still exist.
 
 ## How a run flows
 
@@ -123,7 +127,9 @@ Canonical repo `readbysearch/code2pdf`; Homebrew tap `readbysearch/homebrew-tap`
 (`brew install readbysearch/tap/code2pdf`). Push to GitHub as the `readbysearch` account
 (it has the `workflow` scope; the `waleking` fork is archived).
 
-1. Push `main`, then an annotated tag `vX.Y.Z`. `.github/workflows/release-deb.yml` builds the
+1. Set `version` in `plugins/code2pdf/.claude-plugin/plugin.json` to the release (`X.Y.0`):
+   installed skills only update when it changes, and so never describe unreleased options.
+   Push `main`, then an annotated tag `vX.Y.Z`. `.github/workflows/release-deb.yml` builds the
    `.deb` (lintian), runs the unit and install tests on Ubuntu 24.04 and 26.04, and creates the
    GitHub release with `code2pdf_X.Y.Z_all.deb` and `code2pdf_all.deb` (stable latest link).
 2. In the tap, update `code2pdf.rb` `url` and `sha256`
@@ -131,4 +137,4 @@ Canonical repo `readbysearch/code2pdf`; Homebrew tap `readbysearch/homebrew-tap`
    keep `prefix.install` in sync with what the tarball contains, run
    `brew audit --strict --online readbysearch/tap/code2pdf`, push, then `brew upgrade` and `brew test`.
 3. `install.sh` installs the latest release by default, so pushing `main` alone changes only the
-   installer itself.
+   installer itself, and the skill for new plugin installs (the marketplace reads `main`).

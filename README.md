@@ -191,6 +191,21 @@ code2pdf -a backend --exclude tests --exclude '*_pb2.py' --include 'migrations/*
 code2pdf -a backend --exclude tests --exclude '*_pb2.py' --include 'migrations/*.sql' -o backend.pdf
 ```
 
+**The Claude Code skill.** An agent only uses code2pdf if it knows the tool exists. This
+repository is also a Claude Code plugin marketplace with a `code2pdf` skill, which tells the
+agent when to use code2pdf and code2txt, how to install them, and the steps above:
+
+```bash
+claude plugin marketplace add readbysearch/code2pdf
+claude plugin install code2pdf@code2pdf
+```
+
+(or `/plugin marketplace add readbysearch/code2pdf` inside Claude Code). Then a request such as
+"make me a PDF of the backend for tomorrow's review" uses code2pdf, even though it doesn't name
+the tool. The skill is plain Markdown
+([`plugins/code2pdf/skills/code2pdf/SKILL.md`](plugins/code2pdf/skills/code2pdf/SKILL.md)), so
+other agents that read skill files can use it too.
+
 Show the version, how it was installed, and the libraries it uses (handy when reporting a problem):
 ```bash
 $ code2pdf --version

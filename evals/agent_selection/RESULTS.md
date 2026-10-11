@@ -109,6 +109,43 @@ Eval fixes in this round:
   `rerun-infra`.
 - The grader rejected a file listed twice with two ranges, which is a valid way to do it.
 
+## The skill: do agents find code2pdf when the request doesn't name it?
+
+Every other set says "Use code2pdf (it's installed)". Real users say "make me a PDF of the
+backend". `--prompt plain` drops that sentence, and `--skill` loads the code2pdf plugin
+(`plugins/code2pdf`). That gives 47 cases (the five that name code2pdf and the two scale
+cases left out), 1 run each. code2pdf is on the agent's PATH in both arms.
+
+| | Haiku, no skill | Haiku, skill | Sonnet, no skill | Sonnet, skill |
+|---|---|---|---|---|
+| ran code2pdf | 0% | 98% | 0% | 100% |
+| main grade (bookmarks name the right files) | 0% | **98%** [94–100] | 26% [13–38] | **100%** |
+| right content in the PDF, however it was made | 87% | 98% | 91% | 100% |
+| cost per run, median time | $0.010, 30 s | $0.005, 15 s | $0.090, 18 s | $0.078, 13 s |
+
+- **Without the skill, no agent ever found code2pdf.** They made PDFs themselves:
+  - a reportlab script (Haiku 27 runs, Sonnet 34);
+  - macOS `cupsfilter` (6 and 10);
+  - PDF bytes written by hand (Haiku 7).
+
+  Most got the right code in (87–91%), but the results are plain text pages. Going by the
+  scripts, a rough count: 28–33 runs per model added line numbers, 0–13 added bookmarks, and
+  few had syntax highlighting or a contents page. The 12 Sonnet runs that pass the main grade
+  wrote reportlab bookmarks named after the paths.
+- **With the skill, agents use code2pdf and do better on every measure.** They pass the main
+  grade 98–100%, at half the cost and time for Haiku and 13% less cost for Sonnet. The skill's
+  description alone is enough sometimes. One Sonnet run ran `which code2pdf` and used it
+  without opening the skill.
+- **The one failure is a judgement call.** For "the tutorial (the .rst files in
+  docs/tutorial) in reading order", Haiku rendered the tutorial as a formatted document, which
+  the skill says it isn't for, so it didn't use the skill.
+- **No regression when the request does name code2pdf.** The standard prompt with the skill
+  installed scores 100% (n=52, Haiku), against 96% without it in the same week.
+
+The content check is new for this comparison. It accepts every reference solution and rejects
+the naive `-a .` in 26 of 27 fixtures (see README). Re-grading the stored runs with the changed
+grader left every earlier score as it was.
+
 ## Hillclimbing code2txt
 
 code2txt was the part of the solution without the 3.9 options, so it had room to climb. It was
