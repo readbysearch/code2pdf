@@ -169,6 +169,12 @@ is an error. A name that is itself an existing file is always printed whole. `--
 prints the same form, so its output can be fed back to `--files-from`. code2txt takes the same
 form: the heading says which lines it holds, and `... (lines 41-89 not shown)` marks a gap.
 
+A range that seems to stop inside a function gets a warning, but is printed as given:
+`Warning: app.py:1260-1281 stops inside a block that goes on to line 1286; to print it whole,
+use app.py:1260-1286`. code2pdf reads only indentation for this, so it works in any language:
+lines after the range that are indented deeper than its first line, and a closing `}` at that
+line's own indent, count as the same block. code2pdf repeats the warning after `Done:`.
+
 #### Using code2pdf from a coding agent
 
 You can ask a coding agent (Claude Code, Codex, …) for a PDF in plain words, e.g. "print the

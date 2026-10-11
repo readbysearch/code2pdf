@@ -38,7 +38,8 @@ Use exactly the files listed in
 .I DIRECTORY
 or absolute. The filters don't apply; binary files are skipped.
 .IB path : START \- END
-uses part of a file; its heading says which lines.
+uses part of a file; its heading says which lines. A range that seems to stop inside a
+function (judged by indentation) gets a warning.
 .TP
 .B \-\-no\-toc
 No table of contents.
