@@ -91,6 +91,13 @@ class Theme:
         self.palette = palette
         self.code_background = code_background      # None: code sits directly on the white page
         self.line_number_color = line_number_color or palette.faint
+        # Marked lines: a bar in the gutter and a light tint (prints as light grey in black and white)
+        if palette is MONO:
+            self.mark, self.mark_tint = "#000000", "#ececec"
+        elif code_background:
+            self.mark, self.mark_tint = "#e0a030", "rgba(224, 160, 48, 0.18)"
+        else:
+            self.mark, self.mark_tint = OCHRE, "#f8f0de"
 
 
 BUILTIN = {"paper": (PaperStyle, PAPER), "mono": (MonoStyle, MONO)}
@@ -178,6 +185,8 @@ body {{ margin: 0; color: {p.ink}; font: 8.5pt/1.45 "c2p Code", {CJK_MONO_FALLBA
 /* Contents */
 nav.toc {{ font-family: "c2p Text", {CJK_FALLBACK}; }}
 nav.toc h1 {{ font-size: 22pt; font-weight: 600; margin: 8mm 0 1mm; letter-spacing: -0.01em; bookmark-level: none; }}
+nav.toc .lede, section.file .lede {{ color: {p.ink}; font-size: 11pt; line-height: 1.4; max-width: 150mm;
+    margin: 0 0 2.5mm; }}
 nav.toc .summary {{ color: {p.graphite}; font-size: 9pt; margin: 0 0 0.8mm; }}
 nav.toc .summary:last-of-type {{ margin-bottom: 9mm; }}
 nav.toc h2 {{ font-size: 8.5pt; font-weight: 600; color: {p.graphite}; margin: 5mm 0 1.5mm; bookmark-level: none; }}
@@ -207,6 +216,14 @@ section.file .meta {{ color: {p.graphite}; font-size: 8pt; }}
 /* Part of a file: lines left out are marked; numbering restarts at each range (counter-reset inline) */
 .highlight pre > span.gap {{ display: block; padding-left: 9mm; margin: 1.2mm 0; color: {theme.line_number_color};
                              font: italic 7.5pt "c2p Text", {CJK_FALLBACK}; }}
+/* Marked lines (--changed, path:+START-END): a bar in the gutter between number and code */
+.highlight pre > span.marked {{ background: {theme.mark_tint}; }}
+.highlight pre > span.marked::after {{ content: ""; position: absolute; left: 7mm; top: 0; bottom: 0; width: 0.9mm;
+                                       background: {theme.mark}; }}
+.highlight pre > span.removed {{ display: block; position: relative; padding-left: 9mm; color: {theme.mark};
+                                 font: italic 6.5pt "c2p Text", {CJK_FALLBACK}; line-height: 1.6; }}
+.highlight pre > span.removed::after {{ content: ""; position: absolute; left: 6.5mm; top: 50%; width: 1.9mm;
+                                        border-top: 0.9pt solid {theme.mark}; }}
 {code_block}
 """
 

@@ -25,10 +25,17 @@ and lessons that were expensive to learn.
   `read_file_list` takes them from `--files-from`; `source_info` gets git dates;
   `build_sections`/`build_contents`/`wrap_document` build the HTML; `render_document`
   renders it, or hands big documents to `parts.py`.
-- Part of a file: an `Entry(rel, path, ranges)` carries 1-based inclusive ranges
-  (`split_ranges`/`resolve_ranges`). The whole file is highlighted, then `excerpt_html` keeps
-  the selected line spans and adds `span.gap` markers whose inline `counter-reset` keeps the
-  file's own line numbers. Entries cross into parts workers as plain tuples.
+- Part of a file: an `Entry(rel, path, ranges, marked, removed)` carries 1-based inclusive
+  ranges, marked ranges and "lines removed after N" positions (`parse_spec`/`resolve_spec`;
+  list syntax `path:10-40,+12-14,-30`). The whole file is highlighted; `mark_html` adds
+  `class="marked"` and `span.removed` markers, then `excerpt_html` keeps the selected line spans
+  and adds `span.gap` markers whose inline `counter-reset` keeps the file's own line numbers.
+  Entries cross into parts workers as plain tuples.
+- `--changed REV` (`changes.py`) is only a list generator: `git diff -U0 REV` (against the
+  working tree) gives the marks, and `pieces()` grows each change to its enclosing block by
+  indentation (≤ 40 lines, else 3 lines of context up to a blank line). Its output is the same
+  list form, so `--changed REV --list-files` round-trips through `--files-from` and code2txt.
+  Entries without marks must render exactly as before (checked page by page for v3.12).
 - Selection precedence: `--exclude` > `--include` > default rules (built-in lists, `--ignore-*`,
   `--include-types`). `Pattern.may_reach` decides whether to enter a normally skipped folder:
   only a literal glob segment may name one, so `*`/`**` never pull in `node_modules` or `.git`.

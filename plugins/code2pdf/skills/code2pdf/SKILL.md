@@ -1,6 +1,6 @@
 ---
 name: code2pdf
-description: Print source code as a PDF, or bundle it into one text file for an LLM, with the code2pdf and code2txt command-line tools. Use this whenever someone wants code in a PDF or on paper, such as a whole repository, a folder, some files, the files in a commit, or specific functions with their real line numbers, to read offline, review in print, annotate, hand in, archive or send as one file. Also use it for "all the code in one file" to paste into ChatGPT or Claude. Use it even when no tool is named ("make me a printout of the backend", "I need these two functions as a PDF for the meeting"). Not for rendering Markdown or HTML documents as formatted pages, or for editing existing PDFs.
+description: Print source code as a PDF, or bundle it into one text file for an LLM, with the code2pdf and code2txt command-line tools. Use this whenever someone wants code in a PDF or on paper, such as a whole repository, a folder, some files, what changed in a commit or branch (with the changed lines marked), or specific functions with their real line numbers, to read offline, review in print, annotate, hand in, archive or send as one file. Also use it for "all the code in one file" to paste into ChatGPT or Claude. Use it even when no tool is named ("make me a printout of the backend", "I need these two functions as a PDF for the meeting"). Not for rendering Markdown or HTML documents as formatted pages, or for editing existing PDFs.
 ---
 
 # Printing code with code2pdf
@@ -32,13 +32,18 @@ instead of relying on memory. Unknown options are errors, not ignored.
 
 ## 3. Choose the files
 
-Turn the request into a set of files, in one of two ways:
+Turn the request into a set of files, in one of three ways:
 
 - **code2pdf's own selection**, adjusted with `--include` and `--exclude` globs. This suits
   "the project (or a folder), minus or plus some kinds of files".
 - **Your own list**, piped in with `--files-from -`. This suits selections that come from git
   (`git diff --name-only HEAD~1`), from a search (`grep -rl SessionInterface src`), or that need
   a particular order. The list is used exactly as given, in that order.
+- **What changed**, with `--changed REV` (a commit, tag or branch). It prints each change since
+  REV with its enclosing block and marks the changed lines with a bar in the margin, so a
+  reader sees what's new. It suits reviewing a commit (`--changed HEAD~1`), a branch
+  (`--changed main`) or uncommitted work (`--changed HEAD`). Deleted and untracked files are
+  left out with a note.
 
 The default selection skips hidden folders, build output, vendored dependencies and some
 non-code types such as JSON. Check whether the request needs any of those.
@@ -63,6 +68,9 @@ loses the real path and line numbers.
 
 ## 5. Convert
 
+- `--summary "..."` puts one sentence under the title. Say what this is and what was left out,
+  such as "The refund change: the files it touched, without tests". The reader, and the user
+  weeks later, then know what they're holding.
 - `-o PATH` sets where the PDF goes. Keep it outside the project unless asked, so the project
   stays unchanged and a later run doesn't print the PDF itself.
 - A whole large repository can take several minutes. The first line of output estimates the
@@ -83,6 +91,7 @@ list:
 
 ```bash
 git ls-files src | code2txt --files-from - -o src.md
+code2pdf --changed HEAD~1 --list-files | code2txt --files-from - -o change.md
 ```
 
 Its default selection and filter options differ from code2pdf's, so read `code2txt --help`.

@@ -60,6 +60,28 @@ prints part of a file with its real line numbers (also
 and several ranges separated by commas); the same form works with
 .BR \-s .
 A range that seems to stop inside a function (judged by indentation) gets a warning.
+.IB path : +START \- END
+marks lines with a bar in the margin (marked lines are always printed; with no plain range the
+whole file is), and
+.IB path : \-N
+shows that lines were removed after line
+.IR N ,
+e.g.
+.BR app.py:10\-40,+12\-14,\-30 .
+.TP
+.BI \-\-changed " REV"
+Print what changed since
+.I REV
+(a commit, tag or branch) in the git repository of
+.IR DIR ,
+compared with the files as they are now: each change with its enclosing block (up to 40 lines)
+or a few lines around it, changed lines marked, and a marker where lines were removed. Deleted,
+untracked and binary files are left out with a note. With
+.B \-\-list\-files
+it prints that list, to edit and pass to
+.B \-\-files\-from
+or to
+.BR code2txt .
 .TP
 .BI \-\-include\-types " LIST"
 Only include these comma-separated extensions.
@@ -88,6 +110,11 @@ matches any number of folders; a glob without / matches names at any depth, one 
 matches the path from
 .IR DIR .
 A glob matching a folder covers everything in it; one matching nothing prints a warning.
+.TP
+.BI \-\-summary " TEXT"
+One sentence under the title (under the file name with
+.BR \-s )
+saying what the PDF is; also stored as the PDF's Subject.
 .TP
 .BI \-\-theme " NAME"
 .B paper

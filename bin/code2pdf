@@ -6,6 +6,8 @@ IGNORE_FOLDERS=""
 INCLUDE_TYPES=""
 OUTPUT=""
 FILES_FROM=""
+CHANGED=""
+SUMMARY=""
 SELECT_ARGS=()   # --include/--exclude, passed on to dir_to_pdf.py
 
 # Resolve the install directory (the parent of this script's real bin/ dir), following symlinks
@@ -49,6 +51,8 @@ Options:
   -a, --all DIR             Convert the source files in DIR to DIR/merged.pdf, contents page first
   -o, --output PDF          Write the PDF here instead (a folder: the default name inside it;
                             missing folders are created)
+  --summary TEXT            One sentence under the title saying what this PDF is (e.g. what was
+                            asked for and what was left out); also the PDF's Subject
   --theme NAME              Colour theme: paper (default), mono (black & white), or any Pygments style
   --list-themes             List all theme names
   -q, --quiet               No progress output
@@ -64,7 +68,15 @@ Choosing files for -a (every option can be repeated; LIST is comma-separated):
   --files-from FILE         Convert exactly the files listed in FILE, one per line, in that order
                             (- reads stdin; paths relative to DIR or absolute; DIR defaults to .).
                             path:START-END prints part of a file with its real line numbers
-                            (also path:START-, path:LINE, path:10-40,90-120)
+                            (also path:START-, path:LINE, path:10-40,90-120); +START-END marks
+                            lines with a bar in the margin (marked lines are always printed;
+                            with no plain range, the whole file is); -N marks lines removed
+                            after line N: path:10-40,+12-14,-30
+  --changed REV             Print what changed since REV (a commit, tag or branch) in DIR's git
+                            repository, compared with the files as they are now: each change
+                            with its enclosing block (or a few lines around it), changed lines
+                            marked. Deleted and untracked files are left out, with a note.
+                            With --list-files it prints that list, to edit and pass to --files-from
   --include-types LIST      Only include these extensions (replaces the default list)
   --ignore-types LIST       Skip these extensions
   --ignore-folders LIST     Skip folders with these names, at any depth
@@ -88,6 +100,7 @@ Examples:
   code2pdf -a . --include-types js,ts                          # Only JS/TS files
   git ls-files src | code2pdf --files-from - -o src.pdf        # Exactly these files
   printf 'app.py:120-180\nutil.py\n' | code2pdf --files-from -  # Part of app.py, all of util.py
+  code2pdf --changed HEAD~1 -o change.pdf --summary "The fix for the login timeout"  # The last commit
   code2pdf -a src/ --theme mono                                # Black & white for printing
 HELP
 }
@@ -195,6 +208,16 @@ main() {
                FILES_FROM="$2"
                shift 2
                ;;
+           --changed)
+               need_value "$@"
+               CHANGED="$2"
+               shift 2
+               ;;
+           --summary)
+               need_value "$@"
+               SUMMARY="$2"
+               shift 2
+               ;;
            -s|--single|-a|--all|--list-themes|-h|--help|-V|--version)
                args+=("$1")
                shift
@@ -213,8 +236,8 @@ main() {
 
    # Restore positional parameters from stored arguments
    set -- "${args[@]}"
-   # --files-from lists the files itself; DIR defaults to the current folder
-   if [ -n "$FILES_FROM" ] && [ $# -eq 0 ]; then
+   # --files-from and --changed choose the files themselves; DIR defaults to the current folder
+   if [ -n "$FILES_FROM$CHANGED" ] && [ $# -eq 0 ]; then
        set -- -a .
    fi
    case "$1" in
@@ -224,8 +247,8 @@ main() {
                exit 1
            fi ;;
    esac
-   if [ -n "$FILES_FROM$LIST_FILES${SELECT_ARGS[*]}" ] && [[ "$1" != -a && "$1" != --all ]]; then
-       echo "Error: --files-from, --include, --exclude and --list-files work with -a DIR" >&2
+   if [ -n "$FILES_FROM$CHANGED$LIST_FILES${SELECT_ARGS[*]}" ] && [[ "$1" != -a && "$1" != --all ]]; then
+       echo "Error: --files-from, --changed, --include, --exclude and --list-files work with -a DIR" >&2
        exit 1
    fi
    
@@ -253,7 +276,9 @@ main() {
            ;;
        -s|--single)
            shift
-           exec "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "$1" "$(pwd)" "$OUTPUT"
+           single_args=("$1" "$(pwd)" "$OUTPUT")
+           [ -n "$SUMMARY" ] && single_args+=(--summary "$SUMMARY")
+           exec "$SCRIPTS_DIR/print_single_file_to_pdf.sh" "${single_args[@]}"
            ;;
        -a|--all)
            shift
@@ -266,6 +291,8 @@ main() {
            [ -n "$LIST_FILES" ] && SELECT_ARGS+=(--list-files)
            [ -n "$OUTPUT" ] && SELECT_ARGS+=(--output "$OUTPUT")
            [ -n "$FILES_FROM" ] && SELECT_ARGS+=(--files-from "$FILES_FROM")
+           [ -n "$CHANGED" ] && SELECT_ARGS+=(--changed "$CHANGED")
+           [ -n "$SUMMARY" ] && SELECT_ARGS+=(--summary "$SUMMARY")
            
            # exec: a signal sent to code2pdf (e.g. a command timeout) reaches the renderer
            exec "$SCRIPTS_DIR/print_all.sh" "$1" \

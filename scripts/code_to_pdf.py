@@ -3,7 +3,7 @@
 Convert one source file to PDF with syntax highlighting and UTF-8/CJK support.
 Uses the same design as directory mode (see dir_to_pdf.py), without a table of contents.
 
-Usage: code_to_pdf.py <input_file> <output_pdf> [relative_path] [--theme NAME]
+Usage: code_to_pdf.py <input_file> <output_pdf> [relative_path] [--theme NAME] [--summary TEXT]
 """
 
 import os
@@ -47,6 +47,14 @@ def main(argv):
             return 1
         theme = args[i + 1]
         del args[i:i + 2]
+    summary = None
+    if "--summary" in args:
+        i = args.index("--summary")
+        if i + 1 >= len(args):
+            print("Error: --summary needs a text", file=sys.stderr)
+            return 1
+        summary = args[i + 1] or None
+        del args[i:i + 2]
 
     if len(args) < 2:
         print(__doc__.strip(), file=sys.stderr)
@@ -55,12 +63,12 @@ def main(argv):
     relative_path = args[2] if len(args) > 2 else os.path.basename(input_file)
 
     import dir_to_pdf
-    ranges = ()
-    if not os.path.isfile(input_file):  # FILE:START-END prints part of the file
-        base, wanted = dir_to_pdf.split_ranges(input_file)
-        if wanted and os.path.isfile(base):
+    ranges = marked = removed = ()
+    if not os.path.isfile(input_file):  # FILE:START-END prints part of the file (+START-END marks)
+        base, *wanted = dir_to_pdf.parse_spec(input_file)
+        if any(wanted) and os.path.isfile(base):
             try:
-                ranges, note = dir_to_pdf.resolve_ranges(wanted, dir_to_pdf.file_lines(base))
+                ranges, marked, removed, note = dir_to_pdf.resolve_spec(*wanted, dir_to_pdf.file_lines(base))
             except ValueError as e:
                 print(f"Error: {input_file}: {e}", file=sys.stderr)
                 return 1
@@ -77,8 +85,9 @@ def main(argv):
     os.makedirs(os.path.dirname(os.path.abspath(output_pdf)), exist_ok=True)
 
     try:
-        dir_to_pdf.render_document([dir_to_pdf.Entry(relative_path, os.path.abspath(input_file), ranges)], output_pdf,
-                                   theme_name=theme, project=None, contents=False)
+        dir_to_pdf.render_document([dir_to_pdf.Entry(relative_path, os.path.abspath(input_file), ranges, marked,
+                                                     removed)], output_pdf,
+                                   theme_name=theme, project=None, contents=False, summary=summary)
     except ValueError as e:
         hint = "; run `code2pdf --list-themes` to see the names" if "theme" in str(e) else ""
         print(f"Error: {e}{hint}", file=sys.stderr)

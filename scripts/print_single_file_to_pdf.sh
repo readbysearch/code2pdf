@@ -14,7 +14,7 @@ fi
 
 # Check if the file exists (FILE:START-END prints part of it; code_to_pdf.py checks the range)
 file_path="$1"
-if [ ! -f "$file_path" ] && [[ "$file_path" =~ ^(.+):[0-9][0-9,-]*$ ]] && [ -f "${BASH_REMATCH[1]}" ]; then
+if [ ! -f "$file_path" ] && [[ "$file_path" =~ ^(.+):[-+0-9][-+0-9,]*$ ]] && [ -f "${BASH_REMATCH[1]}" ]; then
   file_path="${BASH_REMATCH[1]}"
 fi
 if [ ! -f "$file_path" ]; then
@@ -25,6 +25,7 @@ fi
 file_name="$1"
 vs_project_folder_name="$2"
 output="${3:-}"   # optional: the PDF path, or a folder for <name>.pdf
+summary=("${@:4}")  # optional: --summary TEXT
 
 # Function to generate a PDF file name
 generate_pdf_file_name() {
@@ -46,4 +47,4 @@ fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # exec, so a signal sent to code2pdf reaches Python (it reports errors and where the PDF went)
-exec python3 "$script_dir/code_to_pdf.py" "$file_name" "$output" "$file_name"
+exec python3 "$script_dir/code_to_pdf.py" "$file_name" "$output" "$file_name" ${summary[@]+"${summary[@]}"}

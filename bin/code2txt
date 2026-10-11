@@ -11,6 +11,7 @@ NO_TOC=false
 VERBOSE=false
 TARGET_DIR=""
 FILES_FROM=""
+SUMMARY=""
 
 # Resolve the install directory (the parent of this script's real bin/ dir), following symlinks;
 # CODE2PDF_HOME overrides it (used by the Homebrew formula)
@@ -50,7 +51,11 @@ Options:
                          (- reads stdin; paths relative to DIRECTORY or absolute; the
                          filters above don't apply, binary files are skipped).
                          path:START-END uses part of a file (also path:START-, path:LINE,
-                         path:10-40,90-120); its heading says which lines
+                         path:10-40,90-120); its heading says which lines. +START-END marks
+                         lines (listed in the heading) and -N says lines were removed after
+                         line N, as in code2pdf (code2pdf --changed REV --list-files makes
+                         such a list)
+  --summary TEXT         One sentence at the top saying what this is
   --no-toc               Skip table of contents generation
   --verbose              Show processing details
   -V, --version          Show the version and how it is installed
@@ -64,6 +69,7 @@ Examples:
   code2txt --ignore-files package-lock.json,yarn.lock  # Ignore specific files
   code2txt --max-file-size 1M        # Skip files larger than 1MB
   git ls-files src | code2txt --files-from - -o src.md   # Exactly these files, in this order
+  code2pdf --changed HEAD~1 --list-files | code2txt --files-from - -o change.md   # The last commit
   code2txt --no-toc --verbose src/   # Verbose output without table of contents
 
 EOF
@@ -102,6 +108,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             FILES_FROM="$2"
+            shift 2
+            ;;
+        --summary)
+            if [ $# -lt 2 ] || [ -z "$2" ]; then
+                echo "Error: --summary needs a value" >&2
+                exit 1
+            fi
+            SUMMARY="$2"
             shift 2
             ;;
         --no-toc)
@@ -179,7 +193,8 @@ fi
     "$MAX_FILE_SIZE" \
     "$NO_TOC" \
     "$VERBOSE" \
-    "$FILES_FROM"
+    "$FILES_FROM" \
+    "$SUMMARY"
 
 exit_code=$?
 
