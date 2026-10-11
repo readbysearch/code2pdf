@@ -12,12 +12,19 @@ Convert source code files to PDF or combine them into a single text file, with t
 - **Full UTF-8 and CJK support** (Chinese, Japanese, Korean)
 - Designed for print: bundled IBM Plex fonts, a colour theme that stays readable in black and white, a black & white theme, or any Pygments theme
 - Dates that identify the printout: printing date and git commit on the contents page, last change per file
+- [Choose exactly the files you want](#choosing-files): globs with `--include`/`--exclude`, or a list with `--files-from` (from `git`, `find` or by hand, in your order)
+- [Print part of a file](#printing-part-of-a-file) with its real path and line numbers: `app.py:120-180`
+- [Print what changed](#printing-what-changed-with-the-changed-lines-marked) in a commit, branch or your working tree, with the changed lines marked: `--changed HEAD~1`
+- [Say what the printout is](#saying-what-a-printout-is---summary) in one sentence under the title: `--summary`
+- [Works well from coding agents](#using-code2pdf-from-a-coding-agent), with a Claude Code skill: `claude plugin install code2pdf --marketplace readbysearch/code2pdf`
 - Available as a command-line tool
 
 ### code2txt
 - Combine source code files into a single text file
 - Generate markdown-formatted output optimized for LLM context
 - Configurable file filtering and size limits
+- Exactly the files you list with `--files-from`, including parts of files (`app.py:120-180`) and marks from `code2pdf --changed REV --list-files`
+- A one-sentence `--summary` at the top
 - Automatic language detection for syntax highlighting
 - Table of contents generation
 
@@ -64,7 +71,7 @@ curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.s
 The script copies the tools to `~/.local/share/code2pdf` (or `/usr/local/share/code2pdf`),
 creates a private Python environment there with Pygments, WeasyPrint and pypdf, links the
 commands into `~/.local/bin` (or `/usr/local/bin`), and verifies the install by converting a
-test file. It installs the **latest release**; `--ref v3.6` installs a specific one and `--ref main`
+test file. It installs the **latest release**; `--ref v3.12` installs a specific one and `--ref main`
 the newest, unreleased code. Re-run it to upgrade. It only adds `~/.local/bin` to your PATH if no
 shell file does so already (Ubuntu's `~/.profile` does).
 
@@ -263,12 +270,12 @@ other agents that read skill files can use it too.
 Show the version, how it was installed, and the libraries it uses (handy when reporting a problem):
 ```bash
 $ code2pdf --version
-code2pdf 3.7 (commit 1e724f3, 2026-10-11)
-  installed: Homebrew, /opt/homebrew/Cellar/code2pdf/3.7
+code2pdf 3.12 (commit 2e8b92f, 2026-10-11)
+  installed: Homebrew, /opt/homebrew/Cellar/code2pdf/3.12
   python 3.14.8, weasyprint 70.0, pygments 2.21.0, pypdf 6.20.0
   CJK font: PingFang SC
 ```
-`3.7+2` means two commits after release 3.7. `--version` works even when WeasyPrint is missing.
+`3.12+2` means two commits after release 3.12. `--version` works even when WeasyPrint is missing.
 
 Show help:
 ```bash

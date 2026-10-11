@@ -62,6 +62,9 @@ pytest --timeout=30
 
 - **test_code2txt_output.py**: code2txt never reads its own output file
 
+- **test_code2txt_files_from.py**: code2txt `--files-from`: the listed files in order, binary
+  files skipped with one line, missing and outside files are errors
+
 - **test_launcher.py**: Launcher behaviour
   - Works through symlinks (as created by `install.sh` or `ln -s`)
   - `CODE2PDF_HOME` override and missing-scripts error
@@ -69,6 +72,8 @@ pytest --timeout=30
 
 - **test_dir_to_pdf.py**: One-pass directory renderer
   - File selection identical to the old bash rules (`--list-files`)
+  - `--include`/`--exclude` globs (precedence, hidden and skipped folders, unused-glob warnings)
+    and `--files-from` (given order, exclusions, binary files reported in one line)
   - Table of contents first, with page numbers that match where each file starts
   - Relative page headers, CJK, no Ghostscript needed, clear error when nothing matches
 
@@ -97,6 +102,24 @@ pytest --timeout=30
   - Leaves unrelated files in `/tmp` alone; the PDF contains only its own pages
   - Leaves no work files behind
   - Fails fast on a missing directory
+
+- **test_line_ranges.py**: Part of a file (`path:START-END`) in code2pdf, `-s` and code2txt
+  - Parsing, merging and clamping ranges; errors name the file; a file named like a range stays whole
+  - Real line numbers and "not shown" markers in the PDF, the same in parts mode
+  - The warning when a range stops inside a block; `-s` with an absolute path
+
+- **test_changes.py**: Marks and `--changed`
+  - `path:+START-END` and `path:-N` (print and mark, lines removed), list round trips
+  - `--changed REV`: pieces grown to small blocks, header lines, context up to a blank line;
+    deleted, renamed, untracked and binary files; subfolders, `--exclude`, error messages
+  - The list fed to `--files-from` and code2txt; parts mode prints the same marks
+  - `--summary` under the title and as the PDF's Subject; no Subject without it
+
+- **test_interrupt.py**: A killed conversion (SIGTERM to the launcher or its group, Ctrl-C)
+  stops its workers and leaves no temp files, also under a non-reaping PID 1 as in CI
+
+- **test_plugin.py**: The Claude Code plugin and marketplace manifests, the skill's front
+  matter, and that every option the skill names exists in `--help`
 
 - **test_integration.py**: Integration tests for both tools
   - Large repository simulation

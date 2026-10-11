@@ -80,7 +80,9 @@ Description: print source code to PDF with a contents page and CJK support
  PDF: a contents page grouped by folder with clickable page numbers, then each
  file with syntax highlighting (500+ languages via Pygments), line numbers,
  dates from git, and bundled IBM Plex fonts. Themes: paper (colour, designed
- for print), mono (black and white) or any Pygments style.
+ for print), mono (black and white) or any Pygments style. Files can be chosen
+ with globs or an exact list, printed in part with their real line numbers, or
+ taken from a git change (--changed REV) with the changed lines marked.
  .
  code2txt combines a directory into one Markdown text file for LLM context.
 CONTROL
