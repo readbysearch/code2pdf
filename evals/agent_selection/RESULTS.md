@@ -69,18 +69,40 @@ requires the real paths as bookmarks, each function's first and last line printe
 own number (the last line is found from indentation and braces), and that neighbouring lines
 named as forbidden are absent. 3 repeats each.
 
-| | v3.10.1 (no ranges) | with `path:START-END` |
-|---|---|---|
-| Haiku | 13% [0–40] | **100%** |
-| Sonnet | 47% [20–67], $0.19/run, 42 s | **80%** [53–100], **$0.08/run, 14 s** |
-| held-out test (both models) | 0–50% | 100% |
+| | v3.10.1 (no ranges) | with `path:START-END` | plus the cut-off warning |
+|---|---|---|---|
+| Haiku | 13% [0–40] | **100%**, n=15 | **100%**, n=30 |
+| Sonnet | 47% [20–67], $0.19/run, 42 s | 80% [53–100], n=15, $0.08/run, 14 s | **100%**, n=30, $0.08/run, 13 s |
+| held-out test (both models) | 0–50% | 100% | 100% |
 
 Without ranges, agents copied functions into new files (`src/context.go`,
 `/tmp/c2p-work/src/Session.swift`), so the PDF showed made-up paths and line numbers starting
-at 1. Sonnet's three remaining failures are its own: it estimated where a function ends and
-stopped a few lines short (`ctx.py:367-391` for a method ending at 394). The help text was
-not tuned for that: a hint written for these cases would be fitting the eval, and code2pdf
-can't know where a function ends.
+at 1.
+
+With ranges, Sonnet's three failures were its own: it estimated where a function ends and
+stopped a few lines short (`ctx.py:367-391` for a method ending at 394, `app.py:1260-1281`
+for one ending at 1286, which left out its `save_session` call). code2pdf now warns about such
+a range, judging only by indentation: `Warning: src/flask/app.py:1260-1281 stops inside a
+block that goes on to line 1286; to print it whole, use src/flask/app.py:1260-1286`. The
+warning comes before converting and again after `Done:`, because agents often keep only the
+tail of the output.
+- In the 30 Sonnet runs it fired in 3, all on short Flask ranges (`1260-1284`, `367-390`,
+  ...). Each time Sonnet re-ran with the suggested range and passed. It never fired on a
+  correct range.
+- Over the 8,400 functions in the five repositories, it flags 20,195 of 20,205 ranges cut 1,
+  2 or 5 lines short and none of the exact ranges. The 10 misses end in a multi-line string at
+  column 0.
+
+The re-run also found a bug. Haiku sometimes runs `code2pdf -s $PWD/context.go:975-1018`, and
+`-s` labelled the file with the whole absolute path (`/private/var/folders/.../context.go`) in
+the header and bookmark. A file inside the current folder is now labelled by its path there.
+The grader accepts the project's own folder as a prefix (`gin/context.go`, from `-s` run one
+level up), as it does for `-a backend`. That run at the earlier commit scores 87% (n=15) and
+is kept as it was.
+
+The Haiku regression pass over all 54 cases after these changes scores 96% [91–100] (n=54).
+Its two failures are agent errors that don't involve ranges: it added
+`.github/dependabot.yml` to "the CI workflow", and it saved one PDF inside the project.
 
 Eval fixes in this round:
 - The usage limit cut runs short ("You've hit your session limit"); they were re-run with

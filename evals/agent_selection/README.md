@@ -52,9 +52,10 @@ Five sets, 54 cases in all (`--set fixtures|real|scale|judgement|excerpt`):
 ## Grader
 
 Programmatic, no LLM judge. The PDF's bookmarks (one per file, labelled with its path) must
-equal the expected files. The order counts when the request gives one, and a `-a backend`
-style folder prefix is allowed. The PDF must be at the requested path, and the project
-must be unchanged byte for byte (`.git` and Python bytecode caches aside). `report` re-grades
+equal the expected files. The order counts when the request gives one. A `-a backend` style
+folder prefix is allowed, and so is the project's own folder name (`gin/context.go` from
+`code2pdf -s` run one level up). The PDF must be at the requested path, and the project must
+be unchanged byte for byte (`.git` and Python bytecode caches aside). `report` re-grades
 stored runs with the current grader, so grader fixes apply to old runs too.
 
 ## Subjects
