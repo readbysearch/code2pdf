@@ -14,6 +14,7 @@ BLOCK_LIMIT = 40   # a piece grows to its enclosing block while the block has at
 CONTEXT = 3        # otherwise it gets this many lines on each side
 MERGE_GAP = 3      # pieces fewer than this many lines apart join up
 WHOLE_SHARE = 0.8  # a file whose pieces cover this much of it is printed whole
+HEADERS = True     # also print the header lines of the blocks a piece is in (`def f():`), as git does
 
 _CLOSER = re.compile(r"[}\])]|end\b")
 _LEAD_IN = re.compile(r"(@|#|//|/\*|\*|--|;)")  # decorators and comments that belong to the next line
@@ -120,6 +121,11 @@ def _header_above(lines, lo, hi):
     level = min(body)
     for n in range(lo - 1, 0, -1):
         if not _blank(lines, n) and _indent(lines[n - 1]) < level:
+            # `) -> None:` or `) error {` ends a statement that starts higher up (a signature
+            # over several lines): the header is the line that opened it
+            while n > 1 and _CLOSER.match(lines[n - 1].lstrip()):
+                n = next((m for m in range(n - 1, 0, -1) if not _blank(lines, m)
+                          and _indent(lines[m - 1]) <= _indent(lines[n - 1])), 1)
             return n
     return None
 
@@ -166,6 +172,17 @@ def piece(lines, lo, hi):
     return lo, hi
 
 
+def _headers(lines, lo):
+    """The header lines of the blocks line LO is in, up to the top level."""
+    found = []
+    while True:
+        head = _header_above(lines, lo, lo)
+        if head is None:
+            return found
+        found.append(head)
+        lo = head
+
+
 def pieces(source, marked, removed):
     """Merged (start, end) ranges to print for these marks, or () for the whole file."""
     lines = source.expandtabs(8).split("\n")
@@ -174,7 +191,10 @@ def pieces(source, marked, removed):
     total = len(lines)
     spans = [(a, min(b, total)) for a, b in marked if a <= total]
     spans += [(max(1, n), max(1, min(total, n + 1))) for n in removed]
-    found = sorted(piece(lines, a, b) for a, b in spans if total)
+    found = [piece(lines, a, b) for a, b in spans if total]
+    if HEADERS:
+        found += [(h, h) for lo, _ in found for h in _headers(lines, lo)]
+    found.sort()
     merged = []
     for a, b in found:
         if merged and a <= merged[-1][1] + MERGE_GAP + 1:
@@ -211,7 +231,8 @@ def changed_entries(root, rev, keep):
         total = source.count("\n") + (1 if source and not source.endswith("\n") else 0)
         marked = tuple((a, min(b, total)) for a, b in marked if a <= total)
         removed = tuple(sorted({min(n, total) for n in removed}))
-        entries.append((rel, pieces(source, marked, removed), marked, removed))
+        shown = pieces(source, marked, removed) or ((1, total),)  # () from pieces(): all of it
+        entries.append((rel, shown, marked, removed))
     short = _git(root, "rev-parse", "--short", f"{rev}^{{commit}}").strip()
     count = sum(b - a + 1 for _, _, marked, _ in entries for a, b in marked)
     since = rev if rev.startswith(short) else f"{rev} ({short})"

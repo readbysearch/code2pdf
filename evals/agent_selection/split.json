@@ -1,5 +1,5 @@
 {
- "note": "Frozen 2026-10-10 before any hillclimbing; new cases go to train or test explicitly. Added 2026-10-10: scale-alamofire (train), scale-gymnasium (test). Added 2026-10-10: judgement cases (3 train, 2 test). Added 2026-10-10: excerpt cases (3 train, 2 test). Added 2026-10-11: change cases (shop-review-last-commit train, relay-review-uncommitted test).",
+ "note": "Frozen 2026-10-10 before any hillclimbing; new cases go to train or test explicitly. Added 2026-10-10: scale-alamofire (train), scale-gymnasium (test). Added 2026-10-10: judgement cases (3 train, 2 test). Added 2026-10-10: excerpt cases (3 train, 2 test). Added 2026-10-11: change cases (shop-review-last-commit train, relay-review-uncommitted test). Added 2026-10-11: real change cases (flask-review-release-code, express-review-release, gin-review-uncommitted train; flask-review-two-files, flask-review-release-not-wip test). Added 2026-10-11 after the mark-rule/header round, held out: express-review-4-20 (test).",
  "test": [
   "alamo-test-plans",
   "express-lib-router",
@@ -22,7 +22,10 @@
   "alamo-retry",
   "alamo-retry-decision",
   "gym-cartpole-step-reset",
-  "relay-review-uncommitted"
+  "relay-review-uncommitted",
+  "flask-review-two-files",
+  "flask-review-release-not-wip",
+  "express-review-4-20"
  ],
  "train": [
   "alamo-all-swift",
@@ -58,6 +61,9 @@
   "gin-context-json-methods",
   "flask-open-save-session",
   "express-dispatch",
-  "shop-review-last-commit"
+  "shop-review-last-commit",
+  "flask-review-release-code",
+  "express-review-release",
+  "gin-review-uncommitted"
  ]
 }

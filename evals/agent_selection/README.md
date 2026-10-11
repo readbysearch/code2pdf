@@ -8,7 +8,7 @@ The design follows [Automating eval design and hillclimbing](https://claude.dev/
 
 ## Cases
 
-Six sets, 56 cases in all (`--set fixtures|real|scale|judgement|excerpt|changes`, or several
+Six sets, 62 cases in all (`--set fixtures|real|scale|judgement|excerpt|changes`, or several
 separated by commas):
 
 - **fixtures** (`cases.py`, `projects.py`): 27 requests over four small projects built fresh
@@ -25,9 +25,14 @@ separated by commas):
 - **excerpt** (`real_cases.EXCERPT_CASES`): 5 requests for specific functions with real line
   numbers. Graded with `pdftotext`: each function's first and last line printed with its own
   number, forbidden neighbours absent, real paths as bookmarks.
-- **changes** (`cases.CHANGE_CASES`): 2 requests to review a commit or uncommitted work with
-  the changed lines marked. Graded on bookmarks and on each contents entry saying lines are
-  marked.
+- **changes** (`cases.CHANGE_CASES`, `real_cases.CHANGE_CASES`): 8 requests to review a commit,
+  a release or uncommitted work with the changed lines marked (2 fixtures, 6 on Flask, Express
+  and gin releases). Graded against the true `git diff`: every changed line printed with its
+  number, the marked count close to the changed one, big files not printed whole. `check`
+  also proves two decoys fail (no marks; every line marked).
+- **pieces** (`pieces_eval.py`, no agents): `--changed`'s piece rules on real release diffs, by
+  whether each changed line's block header and top-level definition are printed, and at what
+  length. Train: Flask and gin releases; test: Express and Alamofire releases.
 - **scale** (`real_cases.SCALE_CASES`): 2 whole-repository prints (Alamofire, ~7,700 pages in
   ~6 minutes; Gymnasium plus its `envs/`) that outlast an agent's 2-minute default command
   timeout. They run one at a time with code2pdf's normal parallelism.

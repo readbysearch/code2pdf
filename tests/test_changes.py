@@ -89,9 +89,10 @@ def test_parse_spec(text, expected):
 
 
 def test_resolve_spec():
-    # marked lines are always shown; with no plain range the whole file is
+    # every range is printed, +ranges are also marked; no range at all: the whole file
     assert dir_to_pdf.resolve_spec(((1, 3),), ((10, 12),), (5,), 20) == (((1, 3), (10, 12)), ((10, 12),), (5,), None)
-    assert dir_to_pdf.resolve_spec((), ((10, 12),), (), 20) == ((), ((10, 12),), (), None)
+    assert dir_to_pdf.resolve_spec((), ((10, 12),), (), 20) == (((10, 12),), ((10, 12),), (), None)
+    assert dir_to_pdf.resolve_spec((), (), (5,), 20) == ((), (), (5,), None)
     with pytest.raises(ValueError, match="after the end"):
         dir_to_pdf.resolve_spec((), (), (21,), 20)
     with pytest.raises(ValueError, match="starts after the end"):
@@ -101,7 +102,7 @@ def test_resolve_spec():
 def test_list_round_trips(repo):
     result = run(CODE2PDF, ["--files-from", "-", "--list-files"], repo, stdin="app.py:1-8,+5,-6\npkg/util.py:+2-3\n")
     assert result.returncode == 0, result.stderr
-    assert result.stdout.split() == ["app.py:1-8,+5-5,-6", "pkg/util.py:+2-3"]
+    assert result.stdout.split() == ["app.py:1-8,+5-5,-6", "pkg/util.py:+2-3"]  # 2-3 is in the mark
     assert "stops inside" not in result.stderr  # pieces with marks are cut on purpose
 
 
@@ -120,6 +121,19 @@ def test_mark_html():
     # an excerpt keeps a marker with the line it follows, and drops one before an unshown line 1
     excerpt = dir_to_pdf.excerpt_html(marked, 0, ((3, 4),), 5)
     assert excerpt.count("lines removed") == 1 and "line 1" not in excerpt
+
+
+@needs_render
+@needs_pdftotext
+def test_a_mark_alone_prints_only_its_lines(repo, temp_dir):
+    """`app.py:+5-6` prints lines 5-6 like `app.py:5-6` does, marked; `1-,+5-6` is the whole file
+    (an agent in the eval wrote marks alone and expected only those lines)."""
+    out = temp_dir / "a.pdf"
+    result = run(CODE2PDF, ["--files-from", "-", "-o", str(out)], repo, stdin="app.py:+5-6\nnew.py:1-,+2\n")
+    assert result.returncode == 0, result.stderr
+    text = pdf_text(out)
+    assert "lines 5–6 of 13, 2 lines marked" in text and "lines 1–4 not shown" in text
+    assert "2 lines, 1 line marked" in text  # all of new.py: shown as a whole file
 
 
 @needs_render
@@ -176,10 +190,9 @@ def test_pieces_grow_to_small_blocks_and_stop_at_big_ones():
     assert changes.pieces(small, ((5, 5),), ()) == ((1, 11),)  # the enclosing function
     assert changes.pieces(small, ((5, 5), (14, 14)), ()) == ()  # most of the file: all of it
     big = "x = 0\n\n\ndef long():\n" + "".join(f"    v{n} = {n}\n" for n in range(100)) + "\n\ndef after():\n    pass\n"
-    [(lo, hi)] = changes.pieces(big, ((50, 50),), ())
-    assert (lo, hi) == (47, 53)  # the function has 101 lines: 3 lines of context each side
-    two = changes.pieces(big, ((50, 50), (55, 55)), ())
-    assert two == ((47, 58),)    # close pieces join
+    # the function has 101 lines: 3 lines of context each side, and its `def` line on its own
+    assert changes.pieces(big, ((50, 50),), ()) == ((4, 4), (47, 53))
+    assert changes.pieces(big, ((50, 50), (55, 55)), ()) == ((4, 4), (47, 58))  # close pieces join
     # a decorator and comment above a small block come with it; context stops at a blank line
     deco = "import x\n\n\n# helper\n@cache\ndef f():\n    return 1\n" + "".join(f"y{n} = {n}\n" for n in range(40))
     assert changes.pieces(deco, ((7, 7),), ()) == ((4, 7),)

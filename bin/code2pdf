@@ -68,14 +68,14 @@ Choosing files for -a (every option can be repeated; LIST is comma-separated):
   --files-from FILE         Convert exactly the files listed in FILE, one per line, in that order
                             (- reads stdin; paths relative to DIR or absolute; DIR defaults to .).
                             path:START-END prints part of a file with its real line numbers
-                            (also path:START-, path:LINE, path:10-40,90-120); +START-END marks
-                            lines with a bar in the margin (marked lines are always printed;
-                            with no plain range, the whole file is); -N marks lines removed
-                            after line N: path:10-40,+12-14,-30
+                            (also path:START-, path:LINE, path:10-40,90-120); +START-END prints
+                            lines and marks them with a bar in the margin, -N marks lines
+                            removed after line N: path:10-40,+12-14,-30 (path:1-,+12-14 for
+                            the whole file with 12-14 marked)
   --changed REV             Print what changed since REV (a commit, tag or branch) in DIR's git
                             repository, compared with the files as they are now: each change
-                            with its enclosing block (or a few lines around it), changed lines
-                            marked. Deleted and untracked files are left out, with a note.
+                            with its enclosing block (or a few lines around it, plus the def or
+                            func line it is in), changed lines marked. Deleted and untracked files are left out, with a note.
                             With --list-files it prints that list, to edit and pass to --files-from
   --include-types LIST      Only include these extensions (replaces the default list)
   --ignore-types LIST       Skip these extensions

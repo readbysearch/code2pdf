@@ -51,8 +51,8 @@ Options:
                          (- reads stdin; paths relative to DIRECTORY or absolute; the
                          filters above don't apply, binary files are skipped).
                          path:START-END uses part of a file (also path:START-, path:LINE,
-                         path:10-40,90-120); its heading says which lines. +START-END marks
-                         lines (listed in the heading) and -N says lines were removed after
+                         path:10-40,90-120); its heading says which lines. +START-END uses
+                         lines and marks them (listed in the heading) and -N says lines were removed after
                          line N, as in code2pdf (code2pdf --changed REV --list-files makes
                          such a list)
   --summary TEXT         One sentence at the top saying what this is

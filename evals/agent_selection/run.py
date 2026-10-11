@@ -49,10 +49,10 @@ for _case in real_cases.JUDGEMENT_CASES:
     _case["set"] = "judgement"
 for _case in real_cases.EXCERPT_CASES:
     _case["set"] = "excerpt"
-for _case in CHANGE_CASES:
+for _case in CHANGE_CASES + real_cases.CHANGE_CASES:
     _case["set"] = "changes"
 CASES = (FIXTURE_CASES + real_cases.REAL_CASES + real_cases.SCALE_CASES + real_cases.JUDGEMENT_CASES
-         + real_cases.EXCERPT_CASES + CHANGE_CASES)
+         + real_cases.EXCERPT_CASES + CHANGE_CASES + real_cases.CHANGE_CASES)
 BY_ID = {case["id"]: case for case in CASES}
 
 RESULTS = os.path.join(HERE, "results")
@@ -308,11 +308,94 @@ def content_check(case, pdf, files):
     return sorted(expected - printed), extra
 
 
-def unmarked(case, pdf):
-    """For CHANGE cases: expected files whose contents entry doesn't say lines are marked."""
-    text = re.sub(r"\s+", " ", subprocess.run(["pdftotext", pdf, "-"], capture_output=True, text=True).stdout)
-    return [rel for rel in case["expected"]
-            if not re.search(rf"{re.escape(os.path.basename(rel))} \([^)]*\b(changed|marked)\)", text)]
+def true_changes(project, base, head):
+    """{rel: {new-side line numbers changed}} between BASE and HEAD (None: the working tree)."""
+    out = subprocess.run(["git", "-C", project, "-c", "core.quotePath=false", "diff", "-U0", "--no-color",
+                          "--no-prefix", "-M", "--diff-filter=d", base, *([head] if head else []), "--"],
+                         capture_output=True, text=True, errors="replace").stdout
+    changed, current = {}, None
+    for line in out.split("\n"):
+        if line.startswith("+++ "):
+            current = line[4:]
+            changed.setdefault(current, set())
+        elif current and line.startswith("@@"):
+            m = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+            start, count = int(m.group(1)), int(m.group(2) or 1)
+            changed[current].update(range(start, start + count))
+    return changed
+
+
+def pdf_sections(pdf):
+    """{page-header path: (code lines [(number, text)], the heading's details line)} from
+    pdftotext: every code page carries its file's path at the top left."""
+    text = subprocess.run(["pdftotext", "-layout", pdf, "-"], capture_output=True, text=True).stdout
+    sections = {}
+    for page in text.split("\f"):
+        rows = [row for row in page.split("\n") if row.strip()]
+        if not rows:
+            continue
+        path = re.split(r"\s{2,}", rows[0].strip())[0]
+        code, details = sections.setdefault(path, ([], []))
+        if not details:  # the first page of a file: its details line is under the name
+            details.extend(row.strip() for row in rows[1:6] if re.match(r"\s*[A-Z][\w+#. -]*, ", row))
+        for row in rows[1:]:
+            m = re.match(r"\s*(\d+)\s+(\S.*)$", row)
+            if m:
+                code.append((int(m.group(1)), m.group(2).strip()))
+    return sections
+
+
+def _compact(numbers):
+    numbers, out = sorted(numbers), []
+    for n in numbers:
+        if out and n == out[-1][1] + 1:
+            out[-1][1] = n
+        else:
+            out.append([n, n])
+    return ",".join(f"{a}" if a == b else f"{a}-{b}" for a, b in out)
+
+
+def change_problems(case, pdf, project):
+    """For CHANGE cases, against the true diff: every changed line printed with its own number,
+    the marked-line count close to the changed one (marking everything fails), and a big file
+    with a small change not printed whole."""
+    truth = true_changes(project, *case["diff"])
+    sections = pdf_sections(pdf)
+    problems = []
+    for rel in case["expected"]:
+        header = next((h for h in sections if h == rel or rel.endswith("/" + h)), None)
+        if header is None:
+            problems.append(f"{rel}: not printed")
+            continue
+        code, details = sections[header]
+        lines = open(os.path.join(project, rel), encoding="utf-8", errors="replace").read().split("\n")
+        total = len(lines) - (1 if lines and lines[-1] == "" else 0)
+        want = truth.get(rel, set())
+        printed = {}
+        for n, text in code:
+            printed.setdefault(n, []).append(re.sub(r"\s+", " ", text))
+
+        def shown(n):  # whitespace collapsed: pdftotext doesn't keep runs of spaces exactly
+            line = re.sub(r"\s+", " ", lines[n - 1].strip())
+            return any(t.startswith(line[:30]) or line.startswith(t[:30]) for t in printed.get(n, []))
+        missing = [n for n in want if n <= total and lines[n - 1].strip() and not shown(n)]
+        if missing:
+            problems.append(f"{rel}: changed lines not printed: {_compact(missing)}")
+        if total > 150 and len(want) < 0.3 * total and len(printed) > 0.6 * total:
+            problems.append(f"{rel}: printed whole ({len(printed)} of {total} lines) for {len(want)} changed")
+        if not want:  # only lines removed: nothing to mark
+            continue
+        info = " ".join(details)
+        m = re.search(r"(\d[\d,]*) lines? (?:changed|marked)", info)
+        marked = int(m.group(1).replace(",", "")) if m else (total if re.search(r"\ball (changed|marked)", info) else None)
+        # At least the non-blank changed lines, at most a few more than all changed lines
+        least = sum(1 for n in want if n <= total and lines[n - 1].strip())
+        most = len(want) + max(2, len(want) // 4)
+        if marked is None:
+            problems.append(f"{rel}: no lines marked")
+        elif not least <= marked <= most:
+            problems.append(f"{rel}: {marked} lines marked, {len(want)} changed")
+    return problems
 
 
 def excerpt_problems(case, pdf, project):
@@ -369,15 +452,17 @@ def grade(case, output, before, after, tool="code2pdf", project=None):
     if case.get("functions") and result["pdf"] and project:
         result["excerpt_problems"] = excerpt_problems(case, output, project)
         result["files_ok"] = result["files_ok"] and not result["excerpt_problems"]
-    if case.get("marks") and result["pdf"]:
-        result["unmarked"] = unmarked(case, output)
-        result["files_ok"] = result["files_ok"] and not result["unmarked"]
+    if case.get("marks") and result["pdf"] and project:
+        result["change_problems"] = change_problems(case, output, project)
+        result["files_ok"] = result["files_ok"] and not result["change_problems"]
     result["pass"] = bool(result["pdf"] and result["files_ok"] and result["order_ok"] is not False
                           and not result["project_changed"])
     # Tool-independent: the right code is in the PDF, however it was made (no bookmarks needed)
     if result["pdf"] and tool == "code2pdf":
         if case.get("functions"):
             content_ok = project is not None and not result.get("excerpt_problems")
+        elif case.get("marks"):  # excerpts by design: judged against the diff instead
+            content_ok = project is not None and not result.get("change_problems")
         else:
             result["content_missing"], result["content_extra"] = content_check(case, output, before)
             content_ok = not result["content_missing"] and not result["content_extra"]
@@ -560,6 +645,8 @@ def describe_failure(r):
         parts.append("wrong order")
     if r.get("excerpt_problems"):
         parts.append("; ".join(r["excerpt_problems"][:3]))
+    if r.get("change_problems"):
+        parts.append("; ".join(r["change_problems"][:3]))
     if r["project_changed"]:
         parts.append("changed project: " + ",".join(r["project_changed"][:3]))
     return "; ".join(parts)
@@ -618,6 +705,16 @@ def cmd_check(args):
             if not case.get("scale") and (naive == case["expected"] if case.get("ordered")
                                           else sorted(naive) == sorted(case["expected"])):
                 problems.append("the naive `code2pdf -a .` passes")
+            # Change cases: the right files whole without marks, or with every line marked, fail
+            for name, suffix in (("whole files, no marks", ""), ("every line marked", ":+1-")):
+                if not case.get("marks"):
+                    break
+                decoy = os.path.join(workdir, "decoy.pdf")
+                subprocess.run(["code2pdf", "--files-from", "-", "-o", decoy], cwd=project, env=env,
+                               input="".join(f"{rel}{suffix}\n" for rel in case["expected"]), text=True,
+                               capture_output=True)
+                if grade(case, decoy, before, projects.snapshot(project), project=project)["pass"]:
+                    problems.append(f"the decoy ({name}) passes")
             status = "ok " if not problems else "BAD"
             bad += bool(problems)
             print(f"{status} {case['id']:22} {len(case['expected']):3} files"

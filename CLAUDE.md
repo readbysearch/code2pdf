@@ -33,7 +33,9 @@ and lessons that were expensive to learn.
   Entries cross into parts workers as plain tuples.
 - `--changed REV` (`changes.py`) is only a list generator: `git diff -U0 REV` (against the
   working tree) gives the marks, and `pieces()` grows each change to its enclosing block by
-  indentation (≤ 40 lines, else 3 lines of context up to a blank line). Its output is the same
+  indentation (≤ 40 lines, else 3 lines of context up to a blank line, plus the header line of
+  every block it is in). `evals/agent_selection/pieces_eval.py` measures these rules on real
+  release diffs (header printed per changed line, lines printed); tune on train only. Its output is the same
   list form, so `--changed REV --list-files` round-trips through `--files-from` and code2txt.
   Entries without marks must render exactly as before (checked page by page for v3.12).
 - Selection precedence: `--exclude` > `--include` > default rules (built-in lists, `--ignore-*`,

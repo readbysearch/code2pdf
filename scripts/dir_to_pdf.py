@@ -80,10 +80,11 @@ def split_ranges(name):
 
 
 def resolve_spec(ranges, marked, removed, total):
-    """(ranges, marked, removed, note) within a file of TOTAL lines. Marked lines are always
-    printed; with no plain range the whole file is. Raises ValueError like resolve_ranges."""
+    """(ranges, marked, removed, note) within a file of TOTAL lines. Every range is printed, and
+    +ranges are also marked; with no range at all the whole file is. Raises ValueError like
+    resolve_ranges."""
     marked, note = resolve_ranges(marked, total) if marked else ((), None)
-    if ranges:
+    if ranges or marked:
         ranges, note_ranges = resolve_ranges(ranges + marked, total)
         note = note or note_ranges
     for n in removed:
@@ -179,8 +180,10 @@ def lines_label(ranges):
 
 
 def range_spec(rel, ranges, marked=(), removed=()):
-    """The --files-from / --list-files form: 'a.py:12-14,18-18', with marks 'a.py:1-9,+3-4,-6'."""
-    parts = ([f"{a}-{b}" for a, b in ranges] + [f"+{a}-{b}" for a, b in marked]
+    """The --files-from / --list-files form: 'a.py:12-14,18-18', with marks 'a.py:1-9,+3-4,-6'.
+    A range that a mark covers is left out: '+3-4' prints lines 3-4 already."""
+    plain = [(a, b) for a, b in ranges if not any(c <= a and b <= d for c, d in marked)]
+    parts = ([f"{a}-{b}" for a, b in plain] + [f"+{a}-{b}" for a, b in marked]
              + [f"-{n}" for n in removed])
     return rel + (":" + ",".join(parts) if parts else "")
 
@@ -634,6 +637,8 @@ def build_sections(entries, theme, info, sources=None, first_index=0, marked_as=
         if marked or removed:
             code = mark_html(code, i, marked, removed)
         every = marked == ((1, lines),)
+        if ranges == ((1, lines),) and (marked or removed):  # all of it, with marks: a whole file
+            ranges = ()
         if ranges:
             code = excerpt_html(code, i, ranges, lines)
             details = f"{language}, {excerpt_label(ranges, lines)}"
@@ -660,11 +665,14 @@ def contents_labels(entries, marked_as="marked", sources=None):
     labels = []
     for entry in (Entry(*e) for e in entries):
         total = count_lines(sources[entry.path]) if sources and entry.path in sources else None
-        if entry.marked and not entry.ranges and entry.marked == ((1, total),):
+        ranges = entry.ranges
+        if ranges == ((1, total),) and (entry.marked or entry.removed):  # all of it: a whole file
+            ranges = ()
+        if entry.marked and not ranges and entry.marked == ((1, total),):
             mark = f"all {marked_label(entry.marked, marked_as)}"
         else:
             mark = marked_label(entry.marked, marked_as)
-        notes = ([excerpt_label(entry.ranges)] if entry.ranges else []) + ([mark] if entry.marked else [])
+        notes = ([excerpt_label(ranges)] if ranges else []) + ([mark] if entry.marked else [])
         labels.append(entry.rel + (f" ({', '.join(notes)})" if notes else ""))
     return labels
 

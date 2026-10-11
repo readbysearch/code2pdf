@@ -293,7 +293,7 @@ BY_ID = {case["id"]: case for case in CASES}
 # list with +START-END marks). Graded on the bookmarks and on each file's contents entry saying
 # that lines are marked ("2 lines changed", "all 3 lines changed", "4 lines marked").
 CHANGE_CASES = [
-    dict(id="shop-review-last-commit", project="shop", marks=True,
+    dict(id="shop-review-last-commit", project="shop", marks=True, diff=("HEAD~1", "HEAD"),
          setup={"commit": {"backend/payments.py": '"""Stripe payments."""\n\n\ndef main():\n    charge(order_total(cart))\n'
                                                   '\n\ndef refund(order, days):\n    if days > 30:\n        raise ValueError("too late")\n'
                                                   '    return charge(-order.total)\n',
@@ -308,7 +308,7 @@ CHANGE_CASES = [
                   "adds an image.",
          source="hand-written (review a commit on paper)",
          reference="code2pdf --changed HEAD~1 -o {out}"),
-    dict(id="relay-review-uncommitted", project="relay", marks=True,
+    dict(id="relay-review-uncommitted", project="relay", marks=True, diff=("HEAD", None),
          setup={"edit": {"internal/queue/queue.go": "package queue\n\ntype Queue struct{}\n\n"
                                                      "// Len reports how many items wait.\nfunc (q *Queue) Len() int {\n"
                                                      "\treturn 0\n}\n",
