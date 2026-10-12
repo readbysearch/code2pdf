@@ -210,9 +210,11 @@ section.file .meta {{ color: {p.graphite}; font-size: 8pt; }}
 /* 15mm = 9mm gutter + 6mm (2em at 8.5pt) hang; plain lengths because WeasyPrint < 62 ignores calc() here */
 .highlight pre > span[id] {{ display: block; position: relative; padding-left: 15mm; text-indent: -6mm;
                              counter-increment: line; }}
-.highlight pre > span[id]::before {{ content: counter(line); position: absolute; left: 0; width: 6mm; text-indent: 0;
-    text-align: right; color: {theme.line_number_color}; font-size: 7pt; line-height: 1.75;
-    font-style: normal; font-weight: 400; }}
+/* The number's right edge is 6mm in. Its box reaches 11mm into the page margin, so numbers of
+   five digits or more (7.4mm at 7pt) grow to the left instead of wrapping onto the next line */
+.highlight pre > span[id]::before {{ content: counter(line); position: absolute; left: -11mm; width: 17mm;
+    text-indent: 0; text-align: right; white-space: nowrap; color: {theme.line_number_color}; font-size: 7pt;
+    line-height: 1.75; font-style: normal; font-weight: 400; }}
 /* Part of a file: lines left out are marked; numbering restarts at each range (counter-reset inline) */
 .highlight pre > span.gap {{ display: block; padding-left: 9mm; margin: 1.2mm 0; color: {theme.line_number_color};
                              font: italic 7.5pt "c2p Text", {CJK_FALLBACK}; }}
