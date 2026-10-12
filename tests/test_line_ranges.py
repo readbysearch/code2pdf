@@ -171,6 +171,22 @@ def test_a_file_whose_name_looks_like_a_range_is_a_file(project):
 
 @needs_render
 @needs_pdftotext
+def test_long_line_numbers_print_whole(temp_dir):
+    """Numbers of five or six digits used to wrap in the 6mm gutter: their last digit printed over
+    the next line's number. They now grow into the left margin, on their own row."""
+    (temp_dir / "big.py").write_text("".join(f"value_{i} = {i}  # line {i} of big.py\n" for i in range(1, 100_011)))
+    spec = "big.py:9995-10004,99995-100010"
+    wanted = set(range(9995, 10005)) | set(range(99995, 100011))
+    for args, stdin in ((["-s", spec, "-o", "single.pdf"], None), (["--files-from", "-", "-o", "list.pdf"], spec + "\n")):
+        result = code2pdf(args, temp_dir, stdin)
+        assert result.returncode == 0, result.stderr
+        found = numbered(pdf_text(temp_dir / args[-1]), "big.py")
+        assert set(found) == wanted, sorted(set(found) ^ wanted)[:5]
+        assert all(number == line for number, line in found.items())
+
+
+@needs_render
+@needs_pdftotext
 def test_excerpt_keeps_real_path_and_line_numbers(project, temp_dir):
     out = temp_dir / "x.pdf"
     result = code2pdf(["--files-from", "-", "-o", str(out)], project, stdin="a.py:12-14,18-19\nsub/c.js:2-3\n")
