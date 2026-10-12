@@ -46,6 +46,9 @@ curl -LO https://github.com/readbysearch/code2pdf/releases/latest/download/code2
 sudo apt install ./code2pdf_all.deb
 ```
 
+A fresh Ubuntu desktop has `wget` but not `curl`: use
+`wget https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf_all.deb` instead.
+
 `apt` installs the dependencies from Ubuntu itself (`weasyprint`, `python3-pygments`, and the
 recommended `python3-pypdf` and `fonts-noto-cjk`), so they get Ubuntu's security updates. The
 package is ~300 KB, works on any CPU, and includes `man code2pdf` / `man code2txt`. Remove it with
@@ -61,7 +64,7 @@ sudo apt install curl python3-venv libpango-1.0-0 libpangoft2-1.0-0 fonts-noto-c
 # Fedora/RHEL
 sudo dnf install curl python3 pango google-noto-sans-cjk-fonts
 
-# Install for current user (~/.local, no sudo)
+# Install for current user (~/.local, no sudo); without curl: wget -qO- URL | bash -s -- --user
 curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --user
 
 # Or system-wide (/usr/local, requires sudo)

@@ -22,6 +22,9 @@ Run `code2pdf --version`. If the command isn't found, it can be installed with o
   `curl -LO https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf_all.deb && sudo apt install ./code2pdf_all.deb`
 - Other Linux, no sudo: `curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --user`
 
+A fresh Ubuntu desktop has `wget` but not `curl`: use `wget URL` instead of `curl -LO URL`, and
+`wget -qO- URL` instead of `curl -sSL URL`.
+
 Installing software changes the user's machine. Say which command you'll run and get their OK
 first, unless they already asked you to install it.
 
