@@ -834,8 +834,7 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
                   "install pypdf to use less memory)", file=sys.stderr)
         big = False
     if big:
-        fd, tmp = tempfile.mkstemp(prefix=".code2pdf-", suffix=".pdf", dir=out_dir)
-        os.close(fd)
+        tmp = new_temp_pdf(out_dir)
         try:
             pages = parts_mode.render_in_parts(entries, tmp, theme, project, moment, info, sources, estimates,
                                                progress, root, jobs=jobs, summary=summary, legend=legend,
@@ -854,8 +853,7 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
 
     document = build_html(entries, theme, project, moment, info, contents=contents, sources=sources,
                           summary=summary, legend=legend, marked_as=marked_as)
-    fd, tmp = tempfile.mkstemp(prefix=".code2pdf-", suffix=".pdf", dir=out_dir)
-    os.close(fd)
+    tmp = new_temp_pdf(out_dir)
     try:
         with _WeasyPrintProgress(progress):
             rendered = HTML(string=document, base_url=root or out_dir).render(font_config=FontConfiguration())
@@ -879,6 +877,28 @@ def exit_on_signals():
         raise KeyboardInterrupt(signal.Signals(signum).name)
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, stop)
+
+
+def exit_now(code):
+    """Exit with CODE once the PDF is written, without freeing every object first: the laid-out
+    pages of a 500-page document take ~5 GB and several seconds to free."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except (OSError, ValueError):
+            pass
+    os._exit(code)
+
+
+def new_temp_pdf(out_dir):
+    """A temporary PDF next to the output, for os.replace. mkstemp makes files private (0600),
+    so it gets the permissions a new file normally has (0644 with the usual umask)."""
+    fd, tmp = tempfile.mkstemp(prefix=".code2pdf-", suffix=".pdf", dir=out_dir)
+    os.close(fd)
+    umask = os.umask(0)
+    os.umask(umask)
+    os.chmod(tmp, 0o666 & ~umask)
+    return tmp
 
 
 def run_main(main, *args):
@@ -989,4 +1009,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    sys.exit(run_main(main))
+    exit_now(run_main(main))
