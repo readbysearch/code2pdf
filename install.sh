@@ -322,6 +322,23 @@ fetch_source() {
     SRC="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"
 }
 
+# The Python environment in $1 (system Python first, else conda-forge), with errors in $2. $2 must
+# be a file the user can write: a redirection is done by this shell, not by sudo, and in a system
+# install $SHARE_DIR belongs to root (redirecting there failed before the setup even started).
+setup_python_env() {
+    local env="$1" log="$2"
+    if [[ "$USE_CONDA" != true ]]; then
+        if create_system_env "$env" 2>"$log"; then
+            return 0
+        fi
+        if command_exists "python3"; then
+            print_warning "The system Python can't run WeasyPrint here (most likely the Pango library is missing)."
+        fi
+        $SUDO rm -rf "$env"
+    fi
+    create_conda_env "$env" 2>>"$log"
+}
+
 # Copy files, build the private Python environment, link the commands
 install_tools() {
     fetch_source
@@ -355,23 +372,15 @@ install_tools() {
     $SUDO chmod +x "$SHARE_DIR"/bin/* "$SHARE_DIR"/scripts/*.sh
 
     print_info "Creating Python environment with Pygments, WeasyPrint and pypdf..."
-    local env="$SHARE_DIR/venv" env_ok=false
-    if [[ "$USE_CONDA" != true ]]; then
-        if create_system_env "$env" 2>"$SHARE_DIR/.install-errors.log"; then
-            env_ok=true
-        else
-            if command_exists "python3"; then
-                print_warning "The system Python can't run WeasyPrint here (most likely the Pango library is missing)."
-            fi
-            $SUDO rm -rf "$env"
-        fi
-    fi
-    if [[ "$env_ok" != true ]]; then
-        create_conda_env "$env" 2>>"$SHARE_DIR/.install-errors.log" && env_ok=true
-    fi
-    if [[ "$env_ok" == true ]]; then
+    local env_ok=false errors
+    errors="$(mktemp "${TMPDIR:-/tmp}/code2pdf-install-errors.XXXXXX")"
+    if setup_python_env "$SHARE_DIR/venv" "$errors"; then
+        env_ok=true
         $SUDO rm -f "$SHARE_DIR/.install-errors.log"
+    else
+        $SUDO cp "$errors" "$SHARE_DIR/.install-errors.log"
     fi
+    rm -f "$errors"
 
     # The launchers find $SHARE_DIR by following these links
     for cmd in code2pdf code2txt; do

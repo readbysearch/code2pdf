@@ -123,3 +123,25 @@ def test_falls_back_to_main_with_a_warning(home, temp_dir):
     result = run_function('REF=""; choose_ref; echo "ref=$REF"', home, path_extra=path)
     assert "ref=main" in result.stdout
     assert "WARNING" in result.stdout
+
+
+def test_python_env_errors_go_to_a_file_the_user_can_write(home, temp_dir):
+    """In a system install $SHARE_DIR belongs to root. The setup's errors used to be redirected there
+    by the user's own shell, which failed before the setup ran: a broken install."""
+    share = temp_dir / "share"
+    share.mkdir()
+    share.chmod(0o555)
+    log = temp_dir / "errors.log"
+    snippet = f'''
+SHARE_DIR="{share}"; SUDO=""; USE_CONDA=false
+create_system_env() {{ touch "{temp_dir}/system-env-ran"; echo "pip failed" >&2; return 1; }}
+create_conda_env() {{ echo "conda failed" >&2; return 1; }}
+setup_python_env "$SHARE_DIR/venv" "{log}" || echo "status $?"  # install.sh runs with set -e
+'''
+    try:
+        result = run_function(snippet, home)
+    finally:
+        share.chmod(0o755)
+    assert (temp_dir / "system-env-ran").exists(), result.stderr
+    assert "status 1" in result.stdout
+    assert "pip failed" in log.read_text() and "conda failed" in log.read_text()
