@@ -428,10 +428,10 @@ See `tests/README.md` for detailed testing documentation.
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+code2pdf is free software under the [GNU Affero General Public License v3.0](LICENSE)
+(AGPL-3.0-only). Anyone may use, change and share it under those terms, at home or at work. If
+your company can't meet the AGPL's terms, for example to ship code2pdf inside a closed product,
+[open an issue](https://github.com/readbysearch/code2pdf/issues) to ask about a commercial licence.
 
-- For commercial use, please [open a GitHub issue](https://github.com/readbysearch/code2pdf/issues) to discuss licensing options
-- For non-commercial use, you must comply with AGPL-3.0 terms
-
-The bundled IBM Plex fonts in `fonts/` are licensed separately under the SIL Open Font License 1.1
-(`fonts/LICENSE-IBM-Plex.txt`).
+The code2pdf name and logo are not covered by the licence: a fork needs its own name. The bundled
+IBM Plex fonts in `fonts/` are under the SIL Open Font License 1.1 (`fonts/LICENSE-IBM-Plex.txt`).
