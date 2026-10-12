@@ -857,7 +857,7 @@ def render_document(entries, output, theme_name="paper", project=None, contents=
     try:
         with _WeasyPrintProgress(progress):
             rendered = HTML(string=document, base_url=root or out_dir).render(font_config=FontConfiguration())
-            rendered.write_pdf(tmp)
+            rendered.write_pdf(tmp, finisher=themes.drop_apple_cid_tables)
         os.replace(tmp, output)
     except BaseException:
         progress.abort()

@@ -137,7 +137,7 @@ def render_part(job):
         for anchor in page.anchors:
             if anchor.startswith("f") and anchor[1:].isdigit():
                 starts.setdefault(int(anchor[1:]), number)
-    document.write_pdf(job["output"])
+    document.write_pdf(job["output"], finisher=themes.drop_apple_cid_tables)
     if os.environ.get("CODE2PDF_DEBUG_TIMING"):
         print(f"\n[timing] part {job['part']}: {len(document.pages)} pages, render {rendered - started:.1f}s, "
               f"write {time.monotonic() - rendered:.1f}s (process up {time.monotonic() - _STARTED:.1f}s)", file=sys.stderr)
@@ -239,7 +239,7 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
                 font_config=FontConfiguration())
             if len(document.pages) == contents_pages:
                 contents_pdf = os.path.join(tmp, "contents.pdf")
-                document.write_pdf(contents_pdf)
+                document.write_pdf(contents_pdf, finisher=themes.drop_apple_cid_tables)
                 break
             contents_pages = len(document.pages)
         else:
@@ -261,7 +261,8 @@ def render_in_parts(entries, output, theme, project, printed_moment, info, sourc
         overlay_body = "".join(f'<div class="page" data-path="{html_module.escape(path)}"></div>' for path in page_paths)
         overlay_pdf = os.path.join(tmp, "overlay.pdf")
         HTML(string=dir_to_pdf.wrap_document(title, printed_moment, themes.font_face_css() + themes.overlay_css(theme, right),
-                                             overlay_body)).write_pdf(overlay_pdf, font_config=FontConfiguration())
+                                             overlay_body)).write_pdf(overlay_pdf, font_config=FontConfiguration(),
+                                                                   finisher=themes.drop_apple_cid_tables)
         mark = _timing("overlay", mark)
 
         # Join
