@@ -122,7 +122,9 @@ detect_system() {
         OS="linux"
         if [[ -r /etc/os-release ]] && . /etc/os-release && [[ "${ID:-}" == "ubuntu" && "${VERSION_ID%%.*}" -ge 24 ]]; then
             print_info "On Ubuntu ${VERSION_ID}, the .deb package is simpler (dependencies come from apt):"
-            echo "  curl -LO https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf_all.deb"
+            local fetch="curl -LO"
+            command_exists curl || fetch="wget"  # a fresh Ubuntu desktop has wget, not curl
+            echo "  $fetch https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf_all.deb"
             echo "  sudo apt install ./code2pdf_all.deb"
         fi
     elif [[ "$OSTYPE" == "darwin"* ]]; then
