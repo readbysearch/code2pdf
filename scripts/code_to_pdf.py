@@ -87,7 +87,8 @@ def main(argv):
     try:
         dir_to_pdf.render_document([dir_to_pdf.Entry(relative_path, os.path.abspath(input_file), ranges, marked,
                                                      removed)], output_pdf,
-                                   theme_name=theme, project=None, contents=False, summary=summary)
+                                   theme_name=theme, project=None, contents=False, summary=summary,
+                                   quiet=bool(os.environ.get("CODE2PDF_QUIET")))
     except ValueError as e:
         hint = "; run `code2pdf --list-themes` to see the names" if "theme" in str(e) else ""
         print(f"Error: {e}{hint}", file=sys.stderr)
@@ -99,4 +100,4 @@ def main(argv):
 if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import dir_to_pdf
-    sys.exit(dir_to_pdf.run_main(main, sys.argv[1:]))
+    dir_to_pdf.exit_now(dir_to_pdf.run_main(main, sys.argv[1:]))

@@ -123,3 +123,46 @@ def test_time_left_includes_writing(progress, monkeypatch):
     clock[0] += 10.0  # 10 s for 50 pages: ~10 s more layout, ~10 s of writing (0.5 x 20 s)
     p.page(50)
     assert "~0:20 left" in stream.getvalue().split("\r")[-1]
+
+
+CODE2PDF = PROJECT_ROOT / "bin" / "code2pdf"
+
+
+def _code2pdf(args, cwd, umask=None):
+    env = {k: v for k, v in os.environ.items() if k != "CODE2PDF_QUIET"}
+    return subprocess.run([str(CODE2PDF), *args], cwd=cwd, capture_output=True, text=True, timeout=180, env=env,
+                          preexec_fn=(lambda: os.umask(umask)) if umask is not None else None)
+
+
+def test_single_file_reports_progress(temp_dir):
+    """-s used to say nothing while it worked: a 500-page file looked stuck for a minute."""
+    (temp_dir / "a.py").write_text("x = 1\n" * 200)
+    result = _code2pdf(["-s", "a.py", "-o", "a.pdf"], temp_dir)
+    assert result.returncode == 0, result.stderr
+    assert "code2pdf: 1 file, 200 lines" in result.stderr
+    assert "Laying out page" in result.stderr
+    assert re.search(r"Done: \d+ pages? in \d+:\d\d", result.stderr)
+    assert "PDF created at a.pdf" in result.stdout  # as before, for scripts that read it
+
+    quiet = _code2pdf(["-q", "-s", "a.py", "-o", "b.pdf"], temp_dir)
+    assert quiet.returncode == 0, quiet.stderr
+    assert "code2pdf:" not in quiet.stderr and "Done:" not in quiet.stderr
+
+
+@pytest.mark.parametrize("umask", [0o022, 0o027])
+def test_pdfs_get_normal_permissions(temp_dir, umask):
+    """The PDF is written to a temporary file first, which mkstemp makes private (0600)."""
+    (temp_dir / "src").mkdir()
+    for i in range(3):
+        (temp_dir / "src" / f"f{i}.py").write_text("x = 1\n" * 300)
+    runs = {"single": ["-s", "src/f0.py", "-o", "single.pdf"], "folder": ["-a", "src", "-o", "folder.pdf"]}
+    for name, args in runs.items():
+        result = _code2pdf(args, temp_dir, umask)
+        assert result.returncode == 0, result.stderr
+        assert (temp_dir / f"{name}.pdf").stat().st_mode & 0o777 == 0o666 & ~umask, name
+    env_parts = dict(os.environ, CODE2PDF_PART_PAGES="2", CODE2PDF_QUIET="1")
+    parts = subprocess.run([str(CODE2PDF), "-a", "src", "-o", "parts.pdf"], cwd=temp_dir, capture_output=True,
+                           text=True, timeout=180, env=env_parts, preexec_fn=lambda: os.umask(umask))
+    assert parts.returncode == 0, parts.stderr
+    assert (temp_dir / "parts.pdf").stat().st_mode & 0o777 == 0o666 & ~umask
+    assert "leaked" not in parts.stderr  # exiting without the usual cleanup leaves nothing behind
