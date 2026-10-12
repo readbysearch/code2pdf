@@ -91,6 +91,11 @@ and lessons that were expensive to learn.
 
 - **CJK without a font prints as empty boxes but the PDF text stays correct**, so text-based
   tests pass. Check fonts (`pdffonts`) or render pages to images.
+- **Render CJK pages with Apple's PDFKit too, not only poppler.** Up to v3.12.1, WeasyPrint kept
+  the Apple-only `cidg` table of PingFang/Hiragino in its subsets; Preview followed it and drew
+  most characters empty or wrong, while poppler and pdftotext were fine. Every `write_pdf` passes
+  `finisher=theme.drop_apple_cid_tables`. To check: a Swift script with `PDFDocument(url:)` and
+  `page.thumbnail(of:for:)` renders a page as Preview does.
 - WeasyPrint < 62 ignores `calc()` in the code-line indent: use plain lengths (Ubuntu 24.04 ships 61).
 - pypdf: use `add_page`, not `append` (it imports one named destination per code line: 10× slower,
   6× bigger); after `merge_page` call `compress_content_streams`; stamp overlays with `over=False`

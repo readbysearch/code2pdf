@@ -78,3 +78,67 @@ def test_conversion_warns_with_a_fix(temp_dir):
     # repeated after "Done:", where it can't scroll away behind the progress lines
     after_done = result.stderr.split("Done:", 1)[1]
     assert "empty boxes" in after_done and "setup_cjk_fonts.sh" in after_done
+
+
+# Apple's CJK fonts (PingFang, Hiragino) carry an Apple-only 'cidg' table. Left in an embedded
+# subset, Preview follows it and prints most characters empty or as other characters.
+
+def embedded_font_tables(pdf):
+    """The OpenType table tags of each font program embedded in PDF."""
+    import io
+    from fontTools.ttLib import TTFont
+    from pypdf import PdfReader
+    found = {}
+    for page in PdfReader(pdf).pages:
+        for ref in page["/Resources"]["/Font"].values():
+            for descendant in ref.get_object().get("/DescendantFonts", []):
+                descriptor = descendant.get_object()["/FontDescriptor"].get_object()
+                for key in ("/FontFile2", "/FontFile3"):
+                    if key in descriptor:
+                        stream = descriptor[key].get_object()
+                        found[id(stream)] = set(TTFont(io.BytesIO(stream.get_data())).keys())
+    return list(found.values())
+
+
+def test_finisher_drops_cidg_and_keeps_the_font_usable():
+    import io
+    import pydyf
+    from fontTools.ttLib import TTFont
+    from fontTools.ttLib.tables.DefaultTable import DefaultTable
+    sys.path.insert(0, str(SCRIPTS))
+    import theme
+    font = TTFont(theme.font_files()[0])
+    font["cidg"] = DefaultTable("cidg")
+    font["cidg"].data = b"\0" * 64
+    data = io.BytesIO()
+    font.save(data)
+    pdf = pydyf.PDF()
+    font_stream = pydyf.Stream([data.getvalue()], pydyf.Dictionary({"Length1": len(data.getvalue())}))
+    other = pydyf.Stream([b"BT /F1 9 Tf ET"])
+    pdf.add_object(font_stream)
+    pdf.add_object(other)
+    theme.drop_apple_cid_tables(None, pdf)
+    kept = font_stream.stream[0]
+    assert "cidg" not in TTFont(io.BytesIO(kept)) and "glyf" in TTFont(io.BytesIO(kept))
+    assert font_stream.extra["Length1"] == len(kept) < len(data.getvalue())
+    assert other.stream == [b"BT /F1 9 Tf ET"]
+
+
+@pytest.mark.skipif(not subprocess.run(["sh", "-c", "fc-list :charset=4e2d | grep -q ."]).returncode == 0,
+                    reason="no font with Chinese characters")
+@pytest.mark.parametrize("part_pages", [None, "1"], ids=["one pass", "parts"])
+def test_printed_cjk_fonts_have_no_cidg(temp_dir, part_pages):
+    source = temp_dir / "note.md"
+    source.write_text("# 温馨提示：没有干货，全是吐槽\n\n" + "在药企做AI转型艰难又痛苦，总结了四宗罪。\n" * 150)
+    env = {**os.environ, **({"CODE2PDF_PART_PAGES": part_pages} if part_pages else {})}
+    if part_pages:
+        env.pop("CODE2PDF_JOBS", None)
+        result = subprocess.run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-a", str(temp_dir), "-o", str(temp_dir / "out.pdf")],
+                                capture_output=True, text=True, env=env)
+        assert "parts" in result.stderr
+    else:
+        result = subprocess.run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-s", str(source), "-o", str(temp_dir / "out.pdf")],
+                                capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stderr
+    tables = embedded_font_tables(temp_dir / "out.pdf")
+    assert tables and all("cidg" not in t for t in tables)

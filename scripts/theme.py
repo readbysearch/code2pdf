@@ -136,6 +136,36 @@ def font_files():
     return [str(FONTS_DIR / filename) for _, filename, _, _ in FONT_FACES]
 
 
+def drop_apple_cid_tables(document, pdf):
+    """WeasyPrint finisher (`write_pdf(finisher=...)`): remove 'cidg' tables from embedded fonts.
+
+    Apple's CJK fonts (PingFang, Hiragino) have an Apple-only 'cidg' table mapping character IDs
+    to glyphs of the whole font. WeasyPrint keeps it in the subsets it embeds, and Preview follows
+    it, so most CJK text printed empty or as other characters (poppler ignores it)."""
+    import io
+    import pydyf
+    from fontTools.ttLib import TTFont
+    for obj in pdf.objects:
+        if not (isinstance(obj, pydyf.Stream) and len(obj.stream) == 1 and isinstance(obj.stream[0], bytes)
+                and b"cidg" in _sfnt_tags(obj.stream[0])):
+            continue
+        font = TTFont(io.BytesIO(obj.stream[0]), recalcBBoxes=False, recalcTimestamp=False)
+        del font["cidg"]
+        kept = io.BytesIO()
+        font.save(kept)
+        obj.stream[0] = kept.getvalue()
+        if "Length1" in obj.extra:
+            obj.extra["Length1"] = len(obj.stream[0])
+
+
+def _sfnt_tags(data):
+    """Table tags of an OpenType/TrueType font file, or nothing for other data."""
+    if data[:4] not in (b"OTTO", b"\0\1\0\0", b"true") or len(data) < 12:
+        return set()
+    count = int.from_bytes(data[4:6], "big")
+    return {data[12 + 16 * i:16 + 16 * i] for i in range(count) if 16 + 16 * i <= len(data)}
+
+
 def css_string(value):
     """Quote a value for use inside a CSS string."""
     return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
