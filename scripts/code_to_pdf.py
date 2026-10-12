@@ -9,14 +9,30 @@ Usage: code_to_pdf.py <input_file> <output_pdf> [relative_path] [--theme NAME] [
 import os
 import sys
 
+from pygments.lexer import bygroups
 from pygments.lexers import TextLexer, get_lexer_for_filename, guess_lexer
+from pygments.lexers.markup import MarkdownLexer as PygmentsMarkdownLexer
+from pygments.token import Generic, Text
 from pygments.util import ClassNotFound
+
+
+class MarkdownLexer(PygmentsMarkdownLexer):
+    """Pygments' Markdown lexer, but a heading's #s must be followed by a space, as in CommonMark
+    and on GitHub. Pygments follows the original Markdown, so `#tag` lines printed as headings."""
+    tokens = {
+        "root": [
+            (r"^(#[ \t].*)(\n)", bygroups(Generic.Heading, Text)),
+            (r"^(#{2,6}[ \t].*)(\n)", bygroups(Generic.Subheading, Text)),
+        ] + [rule for rule in PygmentsMarkdownLexer.tokens["root"]
+             if not (isinstance(rule, tuple) and rule[0].startswith("(^#"))],
+    }
 
 
 def lexer_for(file_path, source=None):
     """Pygments lexer by file name; for unknown names, by a `#!` line; else plain text."""
     try:
-        return get_lexer_for_filename(file_path)
+        lexer = get_lexer_for_filename(file_path)
+        return MarkdownLexer(**lexer.options) if type(lexer) is PygmentsMarkdownLexer else lexer
     except ClassNotFound:
         pass
     if source and source.startswith("#!"):

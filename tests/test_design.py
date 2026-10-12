@@ -118,6 +118,18 @@ class TestLanguageDetection:
         from code_to_pdf import lexer_for
         assert lexer_for("LICENSE", "MIT License\n\nPermission is hereby granted").name == "Text only"
 
+    def test_markdown_hashtags_are_not_headings(self, mod):
+        # A heading's #s are followed by a space (CommonMark, GitHub); `#tag` is text
+        from pygments.token import Generic
+        from code_to_pdf import lexer_for
+        source = "# Title\n\n#大模型[话题]# #RLHF[话题]#\n#tag\n## Part\n###### Deep\n"
+        lexer = lexer_for("notes/note.md", source)
+        assert lexer.name == "Markdown"
+        headings = {value.strip(): token for token, value in lexer.get_tokens(source)
+                    if token in (Generic.Heading, Generic.Subheading)}
+        assert headings == {"# Title": Generic.Heading, "## Part": Generic.Subheading,
+                            "###### Deep": Generic.Subheading}
+
 
 class TestDates:
 
