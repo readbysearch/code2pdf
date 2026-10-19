@@ -64,6 +64,13 @@ and lessons that were expensive to learn.
 - **Every feature works in all four install kinds**: Homebrew, `.deb` (Ubuntu's own packages),
   `install.sh` (venv or conda-forge), git checkout. Check all of them when changing paths,
   dependencies or what gets copied (install.sh copy list, `build-deb.sh`, formula `prefix.install`).
+- **No personal data or credentials in commits or their history**, anywhere: files, comments,
+  test data or commit messages. That means no email addresses, names, account, subscription or
+  tenant IDs, local paths such as `/Users/<name>`, tokens or keys. Commits are authored as
+  `readbysearch <readbysearch@users.noreply.github.com>`. Name an account by its role and look
+  values up at run time. Before each push, search what it adds (`git log -p origin/main..HEAD`).
+  If something got pushed, a fix in a new commit leaves it in the public history: say so, and
+  rewrite history only with the user's OK.
 
 ## Rendering notes
 
