@@ -21,6 +21,9 @@ Run `code2pdf --version`. If the command isn't found, it can be installed with o
 - Ubuntu 24.04+ or Debian 13+:
   `curl -LO https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf_all.deb && sudo apt install ./code2pdf_all.deb`
 - Other Linux, no sudo: `curl -sSL https://raw.githubusercontent.com/readbysearch/code2pdf/main/install.sh | bash -s -- --user`
+- Windows, in PowerShell (no administrator rights):
+  `Invoke-WebRequest https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf-windows-x64.zip -OutFile $env:TEMP\code2pdf.zip; Expand-Archive $env:TEMP\code2pdf.zip $env:LOCALAPPDATA\Programs -Force`,
+  then run it as `$env:LOCALAPPDATA\Programs\code2pdf\code2pdf.exe`. code2txt isn't available on Windows.
 
 A fresh Ubuntu desktop has `wget` but not `curl`: use `wget URL` instead of `curl -LO URL`, and
 `wget -qO- URL` instead of `curl -sSL URL`.

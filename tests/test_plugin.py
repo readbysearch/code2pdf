@@ -43,7 +43,8 @@ def test_every_option_in_the_skill_exists():
     text = SKILL.read_text()
     known = {"code2pdf": help_text("code2pdf"), "code2txt": help_text("code2txt")}
     named = []
-    for tool, args in re.findall(r"\b(code2pdf|code2txt)\b([^`|&;\n]*)", text):
+    # A tool name inside a URL or path (…/code2pdf/releases, \\code2pdf.exe) isn't a command
+    for tool, args in re.findall(r"(?<![/\\.-])\b(code2pdf|code2txt)\b(?![/\\.-])([^`|&;\n]*)", text):
         named += [(tool, option) for option in re.findall(r"(?<![\w-])(--?[a-zA-Z][\w-]*)", args)]
     for option in re.findall(r"`(--?[a-z][\w-]*)`", text):
         named.append(("either", option))
