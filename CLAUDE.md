@@ -167,7 +167,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requiremen
 
 Canonical repo `readbysearch/code2pdf`; Homebrew tap `readbysearch/homebrew-tap`
 (`brew install readbysearch/tap/code2pdf`). Push to GitHub as the `readbysearch` account
-(it has the `workflow` scope; the `waleking` fork is archived).
+(it has the `workflow` scope; the old fork under a personal account is archived).
 
 1. Set `version` in `plugins/code2pdf/.claude-plugin/plugin.json` to the release (`X.Y.0`):
    installed skills only update when it changes, and so never describe unreleased options.
