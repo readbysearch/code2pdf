@@ -18,6 +18,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 import dir_to_pdf  # noqa: E402
 
 from tests.conftest import CODE2PDF  # noqa: E402
+from tests.conftest import posix_only  # noqa: E402
 CODE2TXT = PROJECT_ROOT / "bin" / "code2txt"
 REPO_VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python3"
 
@@ -136,6 +137,7 @@ def test_the_warning_is_repeated_after_done(temp_dir):
     assert lines.count(warning) == 2 and lines[-1] == warning, lines  # agents often keep only the tail
 
 
+@posix_only  # runs code2txt or the bash launchers
 def test_code2txt_warns_the_same_way(temp_dir):
     for name, text in FUNCS.items():
         (temp_dir / name).write_text(text)
@@ -243,6 +245,7 @@ def test_single_file_given_by_absolute_path_is_labelled_by_its_path_here(project
 
 # --- code2txt --------------------------------------------------------------------------------
 
+@posix_only  # runs code2txt or the bash launchers
 def test_code2txt_prints_the_ranges(project, temp_dir):
     out = temp_dir / "out.md"
     result = subprocess.run([str(CODE2TXT), "--files-from", "-", "-o", str(out)], cwd=project,
@@ -256,6 +259,7 @@ def test_code2txt_prints_the_ranges(project, temp_dir):
                                     "value_19 = 19  # line 19 of a.py"]
 
 
+@posix_only  # runs code2txt or the bash launchers
 def test_code2txt_range_errors(project, temp_dir):
     result = subprocess.run([str(CODE2TXT), "--files-from", "-", "-o", str(temp_dir / "o.md")], cwd=project,
                             input="sub/c.js:9-12\n", capture_output=True, text=True, timeout=60)

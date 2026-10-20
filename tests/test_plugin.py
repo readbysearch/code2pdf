@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from tests.conftest import posix_only  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 PLUGIN = PROJECT_ROOT / "plugins" / "code2pdf"
@@ -35,6 +36,7 @@ def test_skill_frontmatter():
     assert 200 < len(fields["description"]) < 1024
 
 
+@posix_only  # runs code2txt or the bash launchers
 def test_every_option_in_the_skill_exists():
     """The skill says "read --help" for the rest, but the options it does name must be real:
     those in code2pdf/code2txt commands, and those written alone in backticks."""

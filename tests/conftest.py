@@ -17,7 +17,8 @@ CODE2PDF = os.environ.get("CODE2PDF_EXE") or str(Path(__file__).parent.parent / 
 
 # The bash launchers, install.sh and code2txt aren't part of the Windows build, and it stops differently (no
 # process groups or SIGINT there)
-POSIX_ONLY = {"test_launcher.py", "test_install_sh.py", "test_print_all_tmp.py", "test_interrupt.py", "test_code2txt.py",
+POSIX_ONLY = {"test_launcher.py", "test_install_sh.py", "test_print_all_tmp.py", "test_interrupt.py", "test_integration.py",
+              "test_code2txt.py",
               "test_code2txt_output.py", "test_code2txt_files_from.py"}
 
 

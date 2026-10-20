@@ -21,14 +21,19 @@ from tests.conftest import posix_only  # noqa: E402
 
 
 def run(tool, args, cwd, stdin=None):
-    env = dict(os.environ, CODE2PDF_QUIET="1", GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+    env = dict(GIT_ENV, CODE2PDF_QUIET="1")
     return subprocess.run([str(tool), *args], cwd=cwd, input=stdin, capture_output=True, text=True,
                           timeout=180, env=env)
 
 
+# The same git settings for making the repository as for code2pdf (run()): Windows' git turns
+# CRLF into LF on commit, so with different settings every line would look changed
+GIT_ENV = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+
+
 def git(cwd, *args):
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, check=True,
-                   capture_output=True)
+                   capture_output=True, env=GIT_ENV)
 
 
 PY = """import os
@@ -171,6 +176,7 @@ def test_changed_lists_the_changes(repo):
     assert "Skipped 1 binary file: logo.png" in notes
 
 
+@posix_only  # runs code2txt or the bash launchers
 def test_changed_list_feeds_files_from_and_code2txt(repo, temp_dir):
     listing = run(CODE2PDF, ["--changed", "HEAD", "--list-files"], repo).stdout
     again = run(CODE2PDF, ["--files-from", "-", "--list-files"], repo, stdin=listing)

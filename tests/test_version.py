@@ -54,8 +54,8 @@ def test_checkout_uses_git(version):
 
 
 @pytest.mark.parametrize("layout, expected", [
-    ("Cellar", "Homebrew"),
-    ("usr-share", "Debian package"),
+    pytest.param("Cellar", "Homebrew", marks=posix_only),
+    pytest.param("usr-share", "Debian package", marks=posix_only),
     ("venv", "install.sh"),
     ("conda", "install.sh (conda-forge environment)"),
     ("git", "git checkout"),
@@ -75,6 +75,7 @@ def test_install_kind(version, temp_dir, layout, expected):
     assert version.install_kind(str(base)) == expected
 
 
+@posix_only  # runs code2txt or the bash launchers
 def test_launchers_print_version(temp_dir):
     for cmd in ("code2pdf", "code2txt"):
         result = subprocess.run([str(PROJECT_ROOT / "bin" / cmd), "--version"], capture_output=True, text=True,
