@@ -146,7 +146,9 @@ def report(name, with_deps=True, install_dir=INSTALL_DIR):
     first = f"{name} {version}"
     if commit:
         first += f" (commit {commit}{', ' + date if date else ''})"
-    lines = [first, f"  installed: {install_kind(install_dir)}, {os.path.realpath(install_dir)}"]
+    # The Windows build: the folder with code2pdf.exe, not its _internal folder
+    where = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.realpath(install_dir)
+    lines = [first, f"  installed: {install_kind(install_dir)}, {where}"]
     if with_deps:
         lines.append("  " + dependencies_line())
         lines.append("  CJK font: " + cjk_font_line())
