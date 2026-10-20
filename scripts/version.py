@@ -106,9 +106,18 @@ def dependencies_line():
     return ", ".join(parts)
 
 
-def cjk_font_line():
+def fc_list_command():
+    """fontconfig's fc-list: on PATH, or next to the modules in the Windows build."""
     import shutil
-    fc_list = shutil.which("fc-list")
+    found = shutil.which("fc-list")
+    if not found and getattr(sys, "frozen", False):
+        bundled = os.path.join(INSTALL_DIR, "fc-list.exe")
+        found = bundled if os.path.isfile(bundled) else None
+    return found
+
+
+def cjk_font_line():
+    fc_list = fc_list_command()
     if not fc_list:
         return "unknown (fc-list not found)"
     try:
@@ -118,10 +127,12 @@ def cjk_font_line():
     families = sorted({name.strip() for line in out.splitlines() for name in line.split(",")
                        if name.strip() and not name.strip().startswith(".")})  # "." = hidden system fonts
     if not families:
-        return "none (Chinese/Japanese/Korean would print as empty boxes; see setup_cjk_fonts.sh)"
+        return ("none (Chinese/Japanese/Korean would print as empty boxes; "
+                + ("add the language in Windows' settings)" if sys.platform == "win32" else "see setup_cjk_fonts.sh)"))
     # Same preference as the code font fallback in theme.py (CJK_MONO_FALLBACK)
     for wanted in ("Noto Sans Mono CJK SC", "Noto Sans Mono CJK TC", "Noto Sans Mono CJK JP",
-                   "Noto Sans Mono CJK KR", "Noto Sans Mono CJK", "PingFang SC", "Hiragino Sans", "Noto Sans CJK"):
+                   "Noto Sans Mono CJK KR", "Noto Sans Mono CJK", "PingFang SC", "Hiragino Sans", "Noto Sans CJK",
+                   "Microsoft YaHei", "Yu Gothic", "Malgun Gothic"):
         for family in families:
             if family.startswith(wanted):
                 return family

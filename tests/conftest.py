@@ -1,11 +1,29 @@
 """Pytest configuration and shared fixtures for testing code2pdf and code2txt."""
 
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Generator, Tuple
 import pytest
+
+#: The code2pdf the tests run: bin/code2pdf, or $CODE2PDF_EXE (the Windows build's code2pdf.exe)
+CODE2PDF = os.environ.get("CODE2PDF_EXE") or str(Path(__file__).parent.parent / "bin" / "code2pdf")
+
+# The bash launchers, install.sh and code2txt aren't part of the Windows build, and it stops differently (no
+# process groups or SIGINT there)
+POSIX_ONLY = {"test_launcher.py", "test_install_sh.py", "test_print_all_tmp.py", "test_interrupt.py", "test_code2txt.py",
+              "test_code2txt_output.py", "test_code2txt_files_from.py"}
+
+
+def pytest_collection_modifyitems(config, items):
+    if sys.platform == "win32":
+        skip = pytest.mark.skip(reason="not part of the Windows build")
+        for item in items:
+            if item.path.name in POSIX_ONLY:
+                item.add_marker(skip)
 
 
 @pytest.fixture
@@ -52,8 +70,8 @@ def code2txt_path(project_root) -> Path:
 
 @pytest.fixture
 def code2pdf_path(project_root) -> Path:
-    """Get the path to code2pdf script."""
-    return project_root / "bin" / "code2pdf"
+    """The code2pdf to test (CODE2PDF)."""
+    return Path(CODE2PDF)
 
 
 def run_command(cmd: list, cwd: Path = None, timeout: int = 30) -> Tuple[int, str, str]:

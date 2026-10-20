@@ -259,14 +259,27 @@ def split_extension(name):
     return name.rsplit(".", 1)[1] if "." in name else ""
 
 
+def rel_path(path, root):
+    """PATH relative to ROOT, with "/" between names on every system, as git and the PDF show
+    paths (".." when it's on another Windows drive)."""
+    try:
+        return os.path.relpath(path, root).replace(os.sep, "/")
+    except ValueError:
+        return ".."
+
+
+def is_outside(rel):
+    return rel == ".." or rel.startswith("../")
+
+
 class Pattern:
     """An --include/--exclude glob, matched against paths relative to ROOT split into names."""
 
     def __init__(self, text, root):
         self.text = text
-        path = text.strip()
-        if os.path.isabs(path) and (path + "/").startswith(root.rstrip("/") + "/"):
-            path = os.path.relpath(path, root)
+        path = text.strip().replace(os.sep, "/")  # on Windows, src\legacy is src/legacy
+        if os.path.isabs(path) and not is_outside(rel_path(path, root)):
+            path = rel_path(path, root)
         while path.startswith("./"):
             path = path[2:]
         path = path.rstrip("/")
@@ -399,7 +412,7 @@ def collect_files(root, selector, exclude):
                     continue
                 default = not forced and not name.startswith(".") and selector.wants_file(name)
                 if (selector.included(rel_parts) or default) and not skip_binary(path, root, selector):
-                    selected.append(os.path.relpath(path, root))
+                    selected.append(rel_path(path, root))
 
     walk(root, [], False)
     return selected
@@ -408,7 +421,7 @@ def collect_files(root, selector, exclude):
 def skip_binary(path, root, selector):
     """Binary files can't be printed; they are reported together by report_binaries()."""
     if is_binary(path):
-        selector.binaries.append(os.path.relpath(path, root))
+        selector.binaries.append(rel_path(path, root))
         return True
     return False
 
@@ -461,14 +474,14 @@ def read_file_list(source, root, selector, exclude):
                     continue
                 if note:
                     print(f"Note: {name}: {note}", file=sys.stderr)
-        rel = os.path.relpath(path, root)
+        rel = rel_path(path, root)
         if not os.path.isfile(path):
             problems.append(f"not a file: {name}")
-        elif rel == ".." or rel.startswith(".." + os.sep):
+        elif is_outside(rel):
             problems.append(f"outside {root}: {name}")
         elif (rel, spec) not in seen:
             seen.add((rel, spec))
-            if (os.path.realpath(path) in exclude or selector.excluded(rel.split(os.sep))
+            if (os.path.realpath(path) in exclude or selector.excluded(rel.split("/"))
                     or skip_binary(path, root, selector)):
                 continue
             selected.append((rel, *spec))
@@ -577,8 +590,8 @@ def missing_cjk_fonts(texts, fc_list="auto"):
     """Scripts (Chinese/Japanese/Korean) that occur in TEXTS but that no installed font covers,
     according to fontconfig's fc-list. Returns [] when fc-list is unavailable (can't tell)."""
     if fc_list == "auto":
-        import shutil
-        fc_list = shutil.which("fc-list")
+        import version
+        fc_list = version.fc_list_command()
     present = []
     for name, probe, ranges in CJK_SCRIPTS:
         if any(lo <= ord(ch) <= hi for text in texts for ch in text if ord(ch) >= 0x1100 for lo, hi in ranges):
@@ -602,6 +615,12 @@ def warn_missing_cjk_fonts(texts):
     missing = missing_cjk_fonts(texts)
     if not missing:
         return ""
+    if sys.platform == "win32":
+        print(f"Warning: the files contain {'/'.join(missing)} text, but no installed font has those characters,\n"
+              f"  so they will print as empty boxes. Add the language in Windows' settings (Time & language,\n"
+              f"  Language & region, Add a language), which installs its fonts, then convert again.", file=sys.stderr)
+        return (f"Warning: {'/'.join(missing)} text printed as empty boxes (no font for it). "
+                f"Fix: add the language in Windows' settings, then convert again.")
     setup = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_cjk_fonts.sh")
     print(f"Warning: the files contain {'/'.join(missing)} text, but no installed font has those characters,\n"
           f"  so they will print as empty boxes. Install a CJK font, then convert again:\n"
@@ -967,7 +986,7 @@ def main(argv=None):
             import changes
 
             def keep(rel, path):
-                return not (os.path.realpath(path) in exclude or selector.excluded(rel.split(os.sep))
+                return not (os.path.realpath(path) in exclude or selector.excluded(rel.split("/"))
                             or skip_binary(path, root, selector))
             files, legend, notes = changes.changed_entries(root, args.changed, keep)
             for note in notes:

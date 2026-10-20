@@ -42,15 +42,29 @@ def part_pages():
     return int(os.environ.get("CODE2PDF_PART_PAGES") or PART_PAGES)
 
 
+def total_ram():
+    """Bytes of RAM, or None if unknown."""
+    if sys.platform == "win32":
+        import ctypes
+
+        class MemoryStatus(ctypes.Structure):
+            _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong)] + \
+                [(name, ctypes.c_ulonglong) for name in ("total", "free", "pagefile", "freepagefile",
+                                                         "virtual", "freevirtual", "freeextended")]
+        status = MemoryStatus(length=ctypes.sizeof(MemoryStatus))
+        return status.total if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)) else None
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except (ValueError, OSError):
+        return None
+
+
 def default_jobs():
     """Parts rendered at the same time (~1.3 GB each): 3 with 16 GB of RAM or more, 2 with 8 GB or
     more, else 1; never more than the CPU count."""
     if os.environ.get("CODE2PDF_JOBS"):
         return max(1, int(os.environ["CODE2PDF_JOBS"]))
-    try:
-        ram = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
-    except (ValueError, OSError, AttributeError):  # Windows has no sysconf
-        ram = 8 << 30
+    ram = total_ram() or 8 << 30
     jobs = 3 if ram >= 16 << 30 else 2 if ram >= 8 << 30 else 1
     return max(1, min(jobs, os.cpu_count() or 1))
 

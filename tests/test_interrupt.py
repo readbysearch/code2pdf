@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_launcher import PROJECT_ROOT, repo_venv_has_deps, isolated_path
+from tests.conftest import CODE2PDF  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not repo_venv_has_deps(), reason="repo .venv lacks pygments/weasyprint")
 
@@ -30,7 +31,7 @@ def big_project(root: Path) -> Path:
 def start(project: Path, new_session=False):
     env = {"HOME": os.environ["HOME"], "PATH": isolated_path(project), "CODE2PDF_QUIET": "1",
            "CODE2PDF_PART_PAGES": "20", "CODE2PDF_JOBS": "2"}
-    return subprocess.Popen([str(PROJECT_ROOT / "bin" / "code2pdf"), "-a", str(project)], env=env,
+    return subprocess.Popen([CODE2PDF, "-a", str(project)], env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=new_session)
 
 

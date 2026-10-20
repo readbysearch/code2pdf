@@ -125,7 +125,7 @@ def test_time_left_includes_writing(progress, monkeypatch):
     assert "~0:20 left" in stream.getvalue().split("\r")[-1]
 
 
-CODE2PDF = PROJECT_ROOT / "bin" / "code2pdf"
+from tests.conftest import CODE2PDF  # noqa: E402
 
 
 def _code2pdf(args, cwd, umask=None):

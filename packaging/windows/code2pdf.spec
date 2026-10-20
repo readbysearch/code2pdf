@@ -8,7 +8,9 @@ from PyInstaller.utils.hooks import collect_all
 root = os.path.abspath(os.path.join(SPECPATH, "..", ".."))
 datas = [(os.path.join(root, "fonts"), "fonts"), (os.path.join(root, "bin", "code2pdf"), "bin"),
          (os.path.join(root, "VERSION"), ".")]
-binaries = []
+# fc-list tells code2pdf whether a font has Chinese, Japanese or Korean characters (or they'd
+# print as empty boxes): MSYS2's, with the same fontconfig DLL that WeasyPrint uses
+binaries = [(r"C:\msys64\ucrt64\bin\fc-list.exe", ".")]
 # The scripts import each other at run time, and parts mode's workers import parts
 hiddenimports = ["dir_to_pdf", "code_to_pdf", "parts", "theme", "changes", "progress", "version"]
 for package in ("pygments",):  # lexers and styles are found by name at run time

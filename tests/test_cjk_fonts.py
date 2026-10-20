@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
+from tests.conftest import CODE2PDF  # noqa: E402
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -133,11 +134,11 @@ def test_printed_cjk_fonts_have_no_cidg(temp_dir, part_pages):
     env = {**os.environ, **({"CODE2PDF_PART_PAGES": part_pages} if part_pages else {})}
     if part_pages:
         env.pop("CODE2PDF_JOBS", None)
-        result = subprocess.run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-a", str(temp_dir), "-o", str(temp_dir / "out.pdf")],
+        result = subprocess.run([CODE2PDF, "-a", str(temp_dir), "-o", str(temp_dir / "out.pdf")],
                                 capture_output=True, text=True, env=env)
         assert "parts" in result.stderr
     else:
-        result = subprocess.run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-s", str(source), "-o", str(temp_dir / "out.pdf")],
+        result = subprocess.run([CODE2PDF, "-s", str(source), "-o", str(temp_dir / "out.pdf")],
                                 capture_output=True, text=True, env=env)
     assert result.returncode == 0, result.stderr
     tables = embedded_font_tables(temp_dir / "out.pdf")

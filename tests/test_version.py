@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
+from tests.conftest import CODE2PDF  # noqa: E402
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -86,7 +87,7 @@ def test_launchers_print_version(temp_dir):
             assert first == f"{cmd} unknown", first
         kind = "git checkout" if (PROJECT_ROOT / ".git").is_dir() else "source tree"  # CI may check out a tarball
         assert f"installed: {kind}" in result.stdout
-    pdf = subprocess.run([str(PROJECT_ROOT / "bin" / "code2pdf"), "-V"], capture_output=True, text=True, timeout=60).stdout
+    pdf = subprocess.run([CODE2PDF, "-V"], capture_output=True, text=True, timeout=60).stdout
     assert re.search(r"python \d+\.\d+.*weasyprint", pdf)
     assert "CJK font:" in pdf
 

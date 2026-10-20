@@ -1,10 +1,13 @@
-# Builds code2pdf.exe on Windows (packaging/windows) and checks it: prints test projects with
-# Chinese, Japanese and Korean text, a line range, parts mode and --changed.
-name: Windows build
+# Builds code2pdf for Windows (packaging/windows: code2pdf.exe with Python, WeasyPrint and Pango
+# inside), checks it, runs the tests with it, and on a version tag attaches
+# code2pdf-windows-x64.zip and its SHA-256 to the GitHub release.
+name: Windows
 
 on:
   push:
-    branches: [windows-spike]
+    branches: [main, windows-spike]
+    tags: ["v*"]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -20,9 +23,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Pango (MSYS2), for WeasyPrint
+      - name: Pango (for WeasyPrint), and pdftotext for the tests, from MSYS2
         run: |
-          C:\msys64\usr\bin\bash -lc 'pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-pango'
+          C:\msys64\usr\bin\bash -lc 'pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-pango mingw-w64-ucrt-x86_64-poppler'
           echo "C:\msys64\ucrt64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
           Remove-Item C:\msys64\ucrt64\bin\python*.exe -ErrorAction SilentlyContinue
       - run: python -m pip install -r requirements.txt pyinstaller
@@ -30,17 +33,54 @@ jobs:
         shell: bash
         run: echo "$(git describe --tags)|$(git rev-parse --short HEAD)|$(git log -1 --format=%cs)" > VERSION
       - run: python -m PyInstaller --noconfirm packaging/windows/code2pdf.spec
-      - name: Check, with Pango no longer on PATH
-        shell: pwsh
+      - run: python -X utf8 packaging/windows/licenses.py dist/code2pdf
+      - name: Check, with MSYS2 no longer on PATH (as on a user's computer)
         run: |
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notlike '*msys64*' }) -join ';'
           python -X utf8 packaging/windows/check.py dist/code2pdf/code2pdf.exe checks
-      - run: Compress-Archive -Path dist/code2pdf -DestinationPath code2pdf-windows.zip
-        if: always()
+      - name: Tests, with code2pdf.exe
+        env:
+          CODE2PDF_EXE: ${{ github.workspace }}\dist\code2pdf\code2pdf.exe
+        run: |
+          python -m pip install -r requirements-test.txt
+          git config --global init.defaultBranch main
+          python -X utf8 -m pytest -q -p no:cacheprovider -rs
+      - name: Zip
+        run: |
+          Compress-Archive -Path dist/code2pdf -DestinationPath code2pdf-windows-x64.zip
+          $hash = (Get-FileHash code2pdf-windows-x64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  code2pdf-windows-x64.zip" | Out-File -Encoding ascii -NoNewline code2pdf-windows-x64.zip.sha256
+          Get-Content code2pdf-windows-x64.zip.sha256
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: code2pdf-windows
           path: |
-            code2pdf-windows.zip
-            checks/*.pdf
+            code2pdf-windows-x64.zip
+            code2pdf-windows-x64.zip.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checks
+          path: checks/*.pdf
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: code2pdf-windows
+          path: dist
+      - name: Attach to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # The .deb workflow may be creating the release at the same moment
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes \
+            || gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber dist/code2pdf-windows-x64.zip dist/code2pdf-windows-x64.zip.sha256

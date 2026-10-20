@@ -17,7 +17,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 import dir_to_pdf  # noqa: E402
 
-CODE2PDF = PROJECT_ROOT / "bin" / "code2pdf"
+from tests.conftest import CODE2PDF  # noqa: E402
 CODE2TXT = PROJECT_ROOT / "bin" / "code2txt"
 REPO_VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python3"
 

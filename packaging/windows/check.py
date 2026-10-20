@@ -40,7 +40,7 @@ def run(label, args, cwd, stdin="", env=None, expect=0):
     return out, err
 
 
-def pdf(label, path, must_contain=(), min_pages=1):
+def pdf(label, path, must_contain=(), min_pages=1, header=None):
     if not os.path.exists(path):
         failures.append(f"{label}: no PDF at {path}")
         return
@@ -54,6 +54,8 @@ def pdf(label, path, must_contain=(), min_pages=1):
     print(f"  {label}: {len(reader.pages)} pages, fonts: {', '.join(sorted(fonts))}")
     if len(reader.pages) < min_pages:
         failures.append(f"{label}: {len(reader.pages)} pages, expected at least {min_pages}")
+    if header and header not in text:
+        failures.append(f"{label}: no page header {header!r} (paths are shown with /)")
     for wanted in must_contain:
         if wanted not in text.replace("\n", "").replace(" ", ""):
             failures.append(f"{label}: {wanted!r} isn't in the PDF's text")
@@ -68,13 +70,16 @@ write(os.path.join(proj, "README.md"), "# 项目说明\n\nA test project → pri
 write(os.path.join(proj, "数据 dir", "笔记.md"), "# 笔记\n\n第一行。\n")
 write(os.path.join(proj, "src", "util.js"), "export const add = (a, b) => a + b;\n")
 
-run("version", ["--version"], OUT)
+out, _ = run("version", ["--version"], OUT)
+if "Windows build" not in out or "CJK font: Microsoft YaHei" not in out:
+    failures.append("version: expected a Windows build that finds Microsoft YaHei")
 out, _ = run("help", ["--help"], OUT)
 if "Usage: code2pdf" not in out:
     failures.append("help: no usage text")
 run("list files", ["-a", proj, "--list-files"], OUT)
 run("folder", ["-a", proj, "-o", os.path.join(OUT, "folder.pdf")], OUT)
-pdf("folder", os.path.join(OUT, "folder.pdf"), ["中文注释", "日本語のコメント", "한국어주석", "项目说明", "笔记.md", "第一行"])
+pdf("folder", os.path.join(OUT, "folder.pdf"), ["中文注释", "日本語のコメント", "한국어주석", "项目说明", "笔记.md", "第一行"],
+    header="数据 dir/笔记.md")
 run("files-from stdin, a range", ["--files-from", "-", "-o", os.path.join(OUT, "list.pdf")], proj,
     stdin="app.py:4-10\n数据 dir/笔记.md\n")
 pdf("files-from", os.path.join(OUT, "list.pdf"), ["defgreet", "笔记.md"])

@@ -34,8 +34,10 @@ FONT_FACES = [
 ]
 
 # Plex has no CJK glyphs; fall back to the system's CJK fonts (monospace ones first for code,
-# so CJK text keeps to the code columns when e.g. setup_cjk_fonts.sh installed Noto Sans Mono CJK)
-CJK_FALLBACK = '"PingFang SC", "Hiragino Sans", "Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans CJK KR", sans-serif'
+# so CJK text keeps to the code columns when e.g. setup_cjk_fonts.sh installed Noto Sans Mono CJK).
+# macOS's, then Noto (Linux), then Windows': named, so one font draws a whole line of Chinese
+CJK_FALLBACK = ('"PingFang SC", "Hiragino Sans", "Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans CJK KR", '
+                '"Microsoft YaHei", "Yu Gothic", "Malgun Gothic", sans-serif')
 CJK_MONO_FALLBACK = ('"Noto Sans Mono CJK SC", "Noto Sans Mono CJK TC", "Noto Sans Mono CJK JP", '
                      '"Noto Sans Mono CJK KR", "Noto Sans Mono CJK HK", ' + CJK_FALLBACK)
 

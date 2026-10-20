@@ -98,6 +98,7 @@ def main(argv):
         inside = os.path.relpath(os.path.realpath(input_file), os.path.realpath(os.getcwd()))
         if inside != ".." and not inside.startswith(".." + os.sep):
             relative_path = inside
+    relative_path = relative_path.replace(os.sep, "/")  # the PDF shows src/app.py on Windows too
     os.makedirs(os.path.dirname(os.path.abspath(output_pdf)), exist_ok=True)
 
     try:
