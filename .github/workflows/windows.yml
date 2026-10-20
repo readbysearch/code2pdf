@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notlike '*msys64*' }) -join ';'
-          python packaging/windows/check.py dist/code2pdf/code2pdf.exe checks
+          python -X utf8 packaging/windows/check.py dist/code2pdf/code2pdf.exe checks
       - run: Compress-Archive -Path dist/code2pdf -DestinationPath code2pdf-windows.zip
         if: always()
       - uses: actions/upload-artifact@v4
