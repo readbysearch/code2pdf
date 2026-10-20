@@ -20,7 +20,8 @@ from pygments.token import (Comment, Error, Generic, Keyword, Literal, Name, Num
 from pygments.util import ClassNotFound
 
 
-FONTS_DIR = Path(__file__).resolve().parent.parent / "fonts"
+# The Windows build (packaging/windows) unpacks the fonts next to its modules
+FONTS_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)) / "fonts"
 
 # (CSS family, file, weight, style)
 FONT_FACES = [

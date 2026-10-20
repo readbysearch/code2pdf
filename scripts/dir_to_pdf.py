@@ -875,8 +875,9 @@ def exit_on_signals():
     does, so `finally` removes the temp files and parts workers are stopped."""
     def stop(signum, frame):
         raise KeyboardInterrupt(signal.Signals(signum).name)
-    for sig in (signal.SIGTERM, signal.SIGHUP):
-        signal.signal(sig, stop)
+    for name in ("SIGTERM", "SIGHUP"):  # Windows has no SIGHUP
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), stop)
 
 
 def exit_now(code):

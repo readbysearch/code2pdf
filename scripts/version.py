@@ -18,7 +18,8 @@ import re
 import subprocess
 import sys
 
-INSTALL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The Windows build (packaging/windows) unpacks VERSION next to its modules
+INSTALL_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def from_describe(describe):
@@ -62,6 +63,8 @@ def read_version(install_dir=INSTALL_DIR):
 
 
 def install_kind(install_dir=INSTALL_DIR):
+    if getattr(sys, "frozen", False):
+        return "Windows build"
     path = os.path.realpath(install_dir) if os.path.exists(install_dir) else install_dir
     if "/Cellar/code2pdf/" in path + "/":
         return "Homebrew"

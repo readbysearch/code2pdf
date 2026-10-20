@@ -49,7 +49,7 @@ def default_jobs():
         return max(1, int(os.environ["CODE2PDF_JOBS"]))
     try:
         ram = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
-    except (ValueError, OSError):
+    except (ValueError, OSError, AttributeError):  # Windows has no sysconf
         ram = 8 << 30
     jobs = 3 if ram >= 16 << 30 else 2 if ram >= 8 << 30 else 1
     return max(1, min(jobs, os.cpu_count() or 1))
