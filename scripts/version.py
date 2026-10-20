@@ -37,7 +37,8 @@ def from_describe(describe):
 
 def _git(directory, *args):
     try:
-        result = subprocess.run(["git", "-C", directory, *args], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(["git", "-C", directory, *args], capture_output=True, encoding="utf-8",
+                                errors="replace", timeout=10)
     except (OSError, subprocess.SubprocessError):
         return ""
     return result.stdout.strip() if result.returncode == 0 else ""
@@ -121,7 +122,8 @@ def cjk_font_line():
     if not fc_list:
         return "unknown (fc-list not found)"
     try:
-        out = subprocess.run([fc_list, ":charset=4e2d", "family"], capture_output=True, text=True, timeout=20).stdout
+        out = subprocess.run([fc_list, ":charset=4e2d", "family"], capture_output=True, encoding="utf-8",
+                             errors="replace", timeout=20).stdout
     except (OSError, subprocess.SubprocessError):
         return "unknown"
     families = sorted({name.strip() for line in out.splitlines() for name in line.split(",")

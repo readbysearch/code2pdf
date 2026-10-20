@@ -17,6 +17,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 import changes  # noqa: E402
 import dir_to_pdf  # noqa: E402
 from tests.test_line_ranges import CODE2PDF, CODE2TXT, needs_pdftotext, needs_render, pdf_text  # noqa: E402
+from tests.conftest import posix_only  # noqa: E402
 
 
 def run(tool, args, cwd, stdin=None):
@@ -216,6 +217,7 @@ def test_changed_errors(repo, temp_dir):
     assert nothing.returncode != 0 and "no file changed since HEAD" in nothing.stderr
 
 
+@posix_only
 def test_changed_without_git(repo, temp_dir):
     import shutil
     tools = temp_dir / "no-git-bin"  # what the launchers need, and no git

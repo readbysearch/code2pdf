@@ -28,7 +28,7 @@ class GitMissing(ValueError):
 def _git(root, *args):
     try:
         result = subprocess.run(["git", "-C", root, "-c", "core.quotePath=false", *args],
-                                capture_output=True, text=True, errors="replace")
+                                capture_output=True, encoding="utf-8", errors="replace")
     except FileNotFoundError:
         raise GitMissing("--changed needs git, which isn't installed") from None
     if result.returncode != 0:

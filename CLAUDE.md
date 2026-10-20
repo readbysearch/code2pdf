@@ -48,6 +48,12 @@ and lessons that were expensive to learn.
   `progress.py`: page estimate and the [1/3]–[3/3] display. `version.py`: `--version`.
 - Default file selection lives in `bin/code2pdf` (`DEFAULT_*`); `print_all.sh` passes the same
   positional arguments as `dir_to_pdf.py` minus OUTPUT (it writes `ROOT/merged.pdf`).
+- Windows: `packaging/windows/code2pdf.py` does what `bin/code2pdf` and the two shell scripts do,
+  in Python, with the same options, defaults and errors (its help text is read from
+  `bin/code2pdf`, and `DEFAULT_*` are copies: change both). `code2pdf.spec` freezes it with
+  PyInstaller into `dist/code2pdf/` (`code2pdf.exe` plus `_internal/`, which is `sys._MEIPASS`
+  and holds the scripts' modules, `fonts/`, `VERSION`, MSYS2's Pango DLLs and `fc-list.exe`).
+  `licenses.py` adds the bundled software's licenses. No code2txt there.
 
 ## Conventions that must hold
 
@@ -61,9 +67,12 @@ and lessons that were expensive to learn.
   `--version` works on broken installs.
 - **Never touch `/tmp`**: output is written to a temp file next to the target and renamed into
   place; code2txt skips its own output file by real path.
-- **Every feature works in all four install kinds**: Homebrew, `.deb` (Ubuntu's own packages),
-  `install.sh` (venv or conda-forge), git checkout. Check all of them when changing paths,
-  dependencies or what gets copied (install.sh copy list, `build-deb.sh`, formula `prefix.install`).
+- **Every feature works in all five install kinds**: Homebrew, `.deb` (Ubuntu's own packages),
+  `install.sh` (venv or conda-forge), git checkout, and the Windows build. Check all of them when
+  changing paths, dependencies or what gets copied (install.sh copy list, `build-deb.sh`, formula
+  `prefix.install`, `code2pdf.spec`).
+- **Paths relative to the project use `/`** on every system (`rel_path`), as git's output and the
+  PDF do; join them with `os.path.join` only to open files.
 - **No personal data or credentials in commits or their history**, anywhere: files, comments,
   test data or commit messages. That means no email addresses, names, account, subscription or
   tenant IDs, local paths such as `/Users/<name>`, tokens or keys. Commits are authored as
@@ -114,6 +123,12 @@ and lessons that were expensive to learn.
 - `VERSION` is filled in by git export-subst in GitHub tarballs (`%(describe:tags)` works there);
   CI checkouts have no `.git` and no tags. raw.githubusercontent.com caches files for 5 minutes.
 - With `pipefail`, `cmd | grep -q` fails when grep exits early (SIGPIPE): capture output first.
+- Windows (the build): Python writes cp1252 to a pipe and decodes git's output as cp1252, so the
+  build runs in UTF-8 mode (`X utf8` in the spec). There is no SIGHUP and no `os.sysconf`.
+  Killing code2pdf.exe (TerminateProcess, all a program without a console can get) skips
+  `finally` and leaves parts workers running: the VS Code extension uses `taskkill /T` and
+  removes the `.code2pdf-*` files itself. Pango's DLLs come from MSYS2's ucrt64, as in
+  WeasyPrint's own Windows build (`exe.yml`).
 - Agents run code2pdf under command timeouts. Launchers `exec` down to Python so signals reach
   it; `run_main` turns SIGTERM/SIGHUP into KeyboardInterrupt so `finally` removes temp files;
   parts mode terminates its workers on abort (`shutdown()` alone waits for each part).
@@ -135,6 +150,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requiremen
   GitHub does (`docker run -d … tail -f /dev/null`, then `docker exec`): its PID 1 never reaps
   orphans, which `bash -c` does (v3.10 failed on a zombie only that setup shows).
 - `packaging/deb/test-deb.sh DEB` installs, uses and removes the `.deb` in a fresh container.
+- `.github/workflows/windows.yml` builds the Windows build, runs `packaging/windows/check.py` (prints
+  CJK, ranges, parts mode and `--changed`, and checks the PDFs' fonts and headers) with MSYS2 off
+  PATH, then the suite with `$CODE2PDF_EXE` set to `code2pdf.exe` (`tests/conftest.py`: `CODE2PDF`;
+  bash-only files are skipped there).
 - **Agent eval** (`evals/agent_selection/`, see its README and RESULTS): headless agents turn
   plain-language requests into PDFs; it needs the `claude` CLI and costs money, so it is not part
   of pytest. Before releasing a change to selection, help text or messages, run the Haiku
@@ -157,6 +176,8 @@ Canonical repo `readbysearch/code2pdf`; Homebrew tap `readbysearch/homebrew-tap`
    patch (v3.7 and v3.10 have tags but no release). `.github/workflows/release-deb.yml` builds the
    `.deb` (lintian), runs the unit and install tests on Ubuntu 24.04 and 26.04, and creates the
    GitHub release with `code2pdf_<version>_all.deb` (e.g. `code2pdf_3.12_all.deb`) and `code2pdf_all.deb` (stable latest link).
+   `.github/workflows/windows.yml` attaches `code2pdf-windows-x64.zip` and its `.sha256`, which
+   the VS Code extension downloads from `releases/latest/download/`: keep both names.
 2. In the tap, update `code2pdf.rb` `url` and `sha256`
    (`curl -sL https://github.com/readbysearch/code2pdf/archive/refs/tags/<tag>.tar.gz | shasum -a 256`),
    keep `prefix.install` in sync with what the tarball contains, run

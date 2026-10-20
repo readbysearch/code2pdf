@@ -125,7 +125,7 @@ def test_time_left_includes_writing(progress, monkeypatch):
     assert "~0:20 left" in stream.getvalue().split("\r")[-1]
 
 
-from tests.conftest import CODE2PDF  # noqa: E402
+from tests.conftest import CODE2PDF, posix_only  # noqa: E402
 
 
 def _code2pdf(args, cwd, umask=None):
@@ -150,6 +150,7 @@ def test_single_file_reports_progress(temp_dir):
 
 
 @pytest.mark.parametrize("umask", [0o022, 0o027])
+@posix_only
 def test_pdfs_get_normal_permissions(temp_dir, umask):
     """The PDF is written to a temporary file first, which mkstemp makes private (0600)."""
     (temp_dir / "src").mkdir()

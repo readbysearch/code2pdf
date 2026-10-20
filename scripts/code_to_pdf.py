@@ -95,7 +95,10 @@ def main(argv):
         print(f"Error: Input file '{input_file}' not found.", file=sys.stderr)
         return 1
     if os.path.isabs(relative_path):  # label a file inside the current folder by its path there
-        inside = os.path.relpath(os.path.realpath(input_file), os.path.realpath(os.getcwd()))
+        try:
+            inside = os.path.relpath(os.path.realpath(input_file), os.path.realpath(os.getcwd()))
+        except ValueError:  # on another Windows drive
+            inside = ".."
         if inside != ".." and not inside.startswith(".." + os.sep):
             relative_path = inside
     relative_path = relative_path.replace(os.sep, "/")  # the PDF shows src/app.py on Windows too

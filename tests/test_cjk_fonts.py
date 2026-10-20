@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
-from tests.conftest import CODE2PDF  # noqa: E402
+from tests.conftest import CODE2PDF, posix_only  # noqa: E402
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -32,16 +32,19 @@ def fake_fc_list(folder, covered=(), log=None):
     return str(script)
 
 
+@posix_only
 def test_reports_scripts_without_fonts(mod, temp_dir):
     fc = fake_fc_list(temp_dir / "bin")
     assert mod.missing_cjk_fonts(["x = '中文'", "# かな", "# 한국어"], fc_list=fc) == ["Chinese", "Japanese", "Korean"]
 
 
+@posix_only
 def test_nothing_missing_when_fonts_cover_the_text(mod, temp_dir):
     fc = fake_fc_list(temp_dir / "bin", covered=("4e2d", "3042", "d55c"))
     assert mod.missing_cjk_fonts(["中文 かな 한국어"], fc_list=fc) == []
 
 
+@posix_only
 def test_only_scripts_that_appear_are_checked(mod, temp_dir):
     log = temp_dir / "calls.log"
     fc = fake_fc_list(temp_dir / "bin", covered=("4e2d",), log=log)
@@ -49,6 +52,7 @@ def test_only_scripts_that_appear_are_checked(mod, temp_dir):
     assert log.read_text().split() == [":charset=4e2d"]
 
 
+@posix_only
 def test_no_cjk_text_means_no_fontconfig_query(mod, temp_dir):
     log = temp_dir / "calls.log"
     fc = fake_fc_list(temp_dir / "bin", log=log)
@@ -62,6 +66,7 @@ def test_without_fc_list_nothing_is_reported(mod):
 
 @pytest.mark.skipif(subprocess.run([PYTHON, "-c", "import weasyprint"], capture_output=True).returncode != 0,
                     reason="weasyprint not available")
+@posix_only
 def test_conversion_warns_with_a_fix(temp_dir):
     project = temp_dir / "proj"
     project.mkdir()

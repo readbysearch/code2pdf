@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
-from tests.conftest import CODE2PDF  # noqa: E402
+from tests.conftest import CODE2PDF, posix_only  # noqa: E402
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -92,6 +92,7 @@ def test_launchers_print_version(temp_dir):
     assert "CJK font:" in pdf
 
 
+@posix_only
 def test_version_works_without_pdf_dependencies(temp_dir):
     """--version must help debug a broken install, so it can't require WeasyPrint."""
     # A python3 that can't see site/dist-packages, i.e. has no WeasyPrint even where it is installed system-wide

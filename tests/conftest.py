@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Generator, Tuple
 import pytest
 
+#: Tests that run shell scripts, symlinks or umask: not on Windows
+posix_only = pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX shell, symlinks or umask")
+
 #: The code2pdf the tests run: bin/code2pdf, or $CODE2PDF_EXE (the Windows build's code2pdf.exe)
 CODE2PDF = os.environ.get("CODE2PDF_EXE") or str(Path(__file__).parent.parent / "bin" / "code2pdf")
 
@@ -31,9 +34,12 @@ def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for testing."""
     temp_path = Path(tempfile.mkdtemp())
     yield temp_path
-    # Cleanup
+    # Cleanup; on Windows, git makes its object files read-only
+    def writable(function, path, *_):
+        os.chmod(path, 0o700)
+        function(path)
     if temp_path.exists():
-        shutil.rmtree(temp_path)
+        shutil.rmtree(temp_path, onerror=writable)
 
 
 @pytest.fixture

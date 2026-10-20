@@ -149,10 +149,13 @@ def test_no_part_files_left_behind(project, temp_dir):
 @pytest.mark.parametrize("ram_gb, cpus, expected", [(4, 8, 1), (8, 8, 2), (15, 8, 2), (16, 8, 3), (64, 8, 3), (24, 2, 2)])
 def test_default_jobs_by_memory(parts, monkeypatch, ram_gb, cpus, expected):
     monkeypatch.delenv("CODE2PDF_JOBS", raising=False)
-    page = 4096
-    monkeypatch.setattr(parts.os, "sysconf", lambda name: page if name == "SC_PAGE_SIZE" else ram_gb * (1 << 30) // page)
+    monkeypatch.setattr(parts, "total_ram", lambda: ram_gb * (1 << 30))
     monkeypatch.setattr(parts.os, "cpu_count", lambda: cpus)
     assert parts.default_jobs() == expected
+
+
+def test_total_ram_is_read(parts):
+    assert parts.total_ram() > 1 << 30
 
 
 def test_metadata_matches_single_pass_creator(project, temp_dir):

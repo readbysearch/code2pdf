@@ -498,7 +498,7 @@ class SourceInfo:
 
 def _git(root, *args):
     result = subprocess.run(["git", "-C", root, "-c", "core.quotePath=false", *args],
-                            capture_output=True, text=True)
+                            capture_output=True, encoding="utf-8", errors="replace")
     return result.stdout if result.returncode == 0 else None
 
 
@@ -539,7 +539,7 @@ def source_info(root, files):
     if head and wanted:
         proc = subprocess.Popen(["git", "-C", root, "-c", "core.quotePath=false", "log", "--relative",
                                  "--no-renames", "--format=@@%cs", "--name-only", "--", "."],
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, encoding="utf-8", errors="replace")
         date = None
         for line in proc.stdout:
             line = line.rstrip("\n")
@@ -601,8 +601,8 @@ def missing_cjk_fonts(texts, fc_list="auto"):
     missing = []
     for name, probe in present:
         try:
-            found = subprocess.run([fc_list, f":charset={probe}", "family"], capture_output=True, text=True,
-                                   timeout=20).stdout.strip()
+            found = subprocess.run([fc_list, f":charset={probe}", "family"], capture_output=True,
+                                   encoding="utf-8", errors="replace", timeout=20).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return []
         if not found:
@@ -921,8 +921,20 @@ def new_temp_pdf(out_dir):
     return tmp
 
 
+def utf8_stdio():
+    """On Windows, stdin, stdout and stderr in a pipe use the ANSI code page (cp1252, say), which
+    has no "→" and no Chinese: read and write UTF-8 there, as on macOS and Linux."""
+    if sys.platform == "win32":
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, ValueError):  # not a text stream, or closed
+                pass
+
+
 def run_main(main, *args):
     """sys.exit(main(*args)), with an interruption reported in one line instead of a traceback."""
+    utf8_stdio()
     exit_on_signals()
     try:
         return main(*args)

@@ -86,6 +86,26 @@ Chinese/Japanese/Korean font is installed, `--user` also installs Noto Sans Mono
 `~/.local/share/fonts` (~26 MB) so CJK text doesn't print as empty boxes; `--no-cjk-fonts`
 skips that.
 
+### Windows
+
+code2pdf for Windows is one folder with `code2pdf.exe` and everything it needs (Python,
+WeasyPrint, Pango): no installer and no administrator rights. In PowerShell, this unzips it into
+`%LOCALAPPDATA%\Programs\code2pdf`, where the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=readbysearch.code2pdf)
+looks for it (its Install button puts it there too), and adds it to your PATH for new terminals:
+
+```powershell
+Invoke-WebRequest https://github.com/readbysearch/code2pdf/releases/latest/download/code2pdf-windows-x64.zip -OutFile "$env:TEMP\code2pdf.zip"
+Expand-Archive "$env:TEMP\code2pdf.zip" "$env:LOCALAPPDATA\Programs" -Force
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:LOCALAPPDATA\Programs\code2pdf", "User")
+```
+
+To upgrade, run the first two lines again. To remove it, delete the folder (and its entry in
+your PATH). Each release lists the zip's SHA-256 in `code2pdf-windows-x64.zip.sha256`.
+
+The Windows build has `code2pdf` only, not `code2txt` (a bash script; use it in WSL). Git dates
+and `--changed` need [Git for Windows](https://git-scm.com/download/win). In
+[WSL](https://learn.microsoft.com/windows/wsl/), install code2pdf as on Linux instead.
+
 ### From a checkout (development)
 
 ```bash
@@ -384,7 +404,8 @@ glyphs; those come from the system fonts.
 ### CJK Font Support
 
 Chinese, Japanese and Korean text works out of the box on **macOS** — the system fonts
-(PingFang, Hiragino, Apple SD Gothic/Nanum) are used automatically.
+(PingFang, Hiragino, Apple SD Gothic/Nanum) are used automatically — and on **Windows**
+(Microsoft YaHei, Yu Gothic, Malgun Gothic).
 
 On **Linux**, a CJK font must be installed, or those characters print as empty boxes.
 code2pdf checks this and warns before and after converting (`install.sh --user` installs a
