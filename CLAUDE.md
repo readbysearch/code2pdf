@@ -181,6 +181,14 @@ Canonical repo `readbysearch/code2pdf`; Homebrew tap `readbysearch/homebrew-tap`
 2. In the tap, update `code2pdf.rb` `url` and `sha256`
    (`curl -sL https://github.com/readbysearch/code2pdf/archive/refs/tags/<tag>.tar.gz | shasum -a 256`),
    keep `prefix.install` in sync with what the tarball contains, run
-   `brew audit --strict --online readbysearch/tap/code2pdf`, push, then `brew upgrade` and `brew test`.
+   `brew audit --strict --online readbysearch/tap/code2pdf`, and open a pull request: never push the
+   formula to the tap's `main`, and don't merge with GitHub's button. Its checks build bottles
+   (Apple silicon on macOS 15 and 26, and Linux), reinstall from them, and print with each on a fresh
+   runner. When they pass, `gh workflow run publish.yml -R readbysearch/homebrew-tap -f
+   pull_request=N` merges it and publishes the bottles (the tap's release `code2pdf-<version>`).
+   Then `brew upgrade` and `brew test`. Without bottles an install builds code2pdf's Python packages
+   from source: 2 min 14 s of a 2 min 50 s install on a clean Mac, against about 1 minute with them.
+   homebrew-core has no bottles of Python, Pango or Pillow for Intel Macs or macOS 14, so there
+   everything builds from source anyway.
 3. `install.sh` installs the latest release by default, so pushing `main` alone changes only the
    installer itself, and the skill for new plugin installs (the marketplace reads `main`).
